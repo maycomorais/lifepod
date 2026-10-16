@@ -20,6 +20,58 @@ let TAXA_DEBITO_BR = 0; // Taxa cartão débito (%)
 let TAXA_CREDITO_BR = 0; // Taxa cartão crédito (%)
 let CFG_LOGO_URL = ""; // Logo da loja (para notificações push)
 
+// ── Fallback defensivo: se freteUtils.js falhar ao carregar,
+//    define stubs que evitam o crash do fluxo de frete.
+//    (só sobrescreve se as funções reais não existirem) ─────────
+if (typeof obterDistanciaPelaRota !== "function") {
+  console.error(
+    "[app.js] ⚠️ freteUtils.js não carregou. Usando fallback sem OSRM.",
+  );
+  window.obterDistanciaPelaRota = async () => null; // força fallback Haversine/sem-localização
+}
+
+if (typeof calcularFreteSemLocalizacao !== "function") {
+  console.error("[app.js] ⚠️ calcularFreteSemLocalizacao ausente — usando stub.");
+  window.calcularFreteSemLocalizacao = (tabelaFrete) => {
+    const idx = 2; // faixa 2,1–3 km
+    const faixa = Array.isArray(tabelaFrete) ? tabelaFrete[idx] : null;
+    if (faixa?.acombinar === true) {
+      return { loja: 0, motoboy: 0, index: idx, distancia: null, semLocalizacao: true, acombinar: true };
+    }
+    return {
+      loja:    Number(faixa?.loja)    || 12000,
+      motoboy: Number(faixa?.motoboy) || 12000,
+      index: idx,
+      distancia: null,
+      semLocalizacao: true,
+      acombinar: false,
+    };
+  };
+}
+
+if (typeof calcularFretePorDistancia !== "function") {
+  window.calcularFretePorDistancia = (distKm, tabelaFrete) => {
+    const limites = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20];
+    const fallback = [
+      6000,9000,12000,15000,18000,21000,24000,27000,30000,33000,
+      36000,39000,42000,45000,48000,51000,54000,57000,60000,63000,
+    ];
+    let idx = limites.findIndex(l => distKm <= l);
+    if (idx === -1) idx = limites.length - 1;
+    const faixa = Array.isArray(tabelaFrete) ? tabelaFrete[idx] : null;
+    if (faixa?.acombinar === true) {
+      return { loja: 0, motoboy: 0, index: idx, distancia: distKm, acombinar: true };
+    }
+    return {
+      loja:    Number(faixa?.loja)    || fallback[idx],
+      motoboy: Number(faixa?.motoboy) || fallback[idx],
+      index: idx,
+      distancia: distKm,
+      acombinar: false,
+    };
+  };
+}
+
 async function carregarConfiguracoesLoja() {
   const { data, error } = await supa
     .from("configuracoes")
