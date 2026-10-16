@@ -2,43 +2,32 @@
 // Edge Function — White Label
 //
 // Responsabilidade:
-//   1. Recebe o payload do pedido vindo do app
-//   2. Verifica se a loja está aberta (loja_aberta) — rejeita se fechada
+//   1. Recebe o payload do pedido
+//   2. Verifica se a loja está aberta (loja_aberta + horarios_semanais)
 //   3. Se for delivery com coordenadas, recalcula o frete no servidor
-//      usando OSRM (fallback: Haversine) + tabela_frete do banco
-//   4. Verifica limite_distancia_km — rejeita se ultrapassado
+//   4. Verifica limite_distancia_km
 //   5. Corrige silenciosamente se o cliente enviou frete menor que o real
-//   6. Aplica descontos corretamente no total_geral (cupom + pdv + cashback)
-//   7. Insere o pedido com os valores corretos e retorna { id }
+//   6. Aplica descontos corretamente no total_geral
+//   7. Insere o pedido com os valores corretos
+//   8. Trava por caixa fechado (opcional, controlado por configuracoes)
 //
-// Deploy:
-//   supabase functions deploy validar-pedido --project-ref <REF>
+// Deploy: supabase functions deploy validar-pedido --project-ref <REF>
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ── Faixas de km (espelha app.js) ────────────────────────────────────────
 const LIMITES_KM = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
-// ── CORS ──────────────────────────────────────────────────────────────────
+const FALLBACK_FRETE = [
+  6000, 9000, 12000, 15000, 18000, 21000, 24000, 27000, 30000, 33000,
+  36000, 39000, 42000, 45000, 48000, 51000, 54000, 57000, 60000, 63000,
+];
+
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// ── Haversine ─────────────────────────────────────────────────────────────
-function distanciaReta(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const toRad = (x: number) => (x * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// ── OSRM ──────────────────────────────────────────────────────────────────
 async function distanciaPelaRota(
   lat1: number, lon1: number, lat2: number, lon2: number
 ): Promise<number | null> {
@@ -46,14 +35,15 @@ async function distanciaPelaRota(
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
     const d = await r.json();
-    if (d.code === "Ok") return d.routes[0].distance / 1000;
+    if (d.code === "Ok" && d.routes?.[0]?.distance) {
+      return d.routes[0].distance / 1000;
+    }
     return null;
   } catch {
     return null;
   }
 }
 
-// ── Calcula frete esperado ────────────────────────────────────────────────
 function calcularFreteEsperado(
   dist: number,
   tabelaFrete: Array<{ loja: number; motoboy: number; acombinar?: boolean }> | null
@@ -62,61 +52,74 @@ function calcularFreteEsperado(
   for (let i = 0; i < LIMITES_KM.length; i++) {
     if (dist <= LIMITES_KM[i]) { freteIndex = i; break; }
   }
+  if (freteIndex === -1) freteIndex = LIMITES_KM.length - 1;
 
-  if (freteIndex === -1) return { loja: 0, motoboy: 0, acombinar: true };
-  if (tabelaFrete?.[freteIndex]?.acombinar) return { loja: 0, motoboy: 0, acombinar: true };
-
+  if (tabelaFrete?.[freteIndex]?.acombinar) {
+    return { loja: 0, motoboy: 0, acombinar: true };
+  }
   if (tabelaFrete?.[freteIndex]) {
     return {
-      loja:    tabelaFrete[freteIndex].loja    || 0,
-      motoboy: tabelaFrete[freteIndex].motoboy || 0,
+      loja:      Number(tabelaFrete[freteIndex].loja)    || 0,
+      motoboy:   Number(tabelaFrete[freteIndex].motoboy) || 0,
       acombinar: false,
     };
   }
-
-  // Fallback sem tabela
-  let loja = 0;
-  if      (dist <= 3) loja = 6000;
-  else if (dist <= 5) loja = 12000;
-  else if (dist <= 8) loja = 18000;
-  else                loja = 24000 + Math.ceil(dist - 8) * 3000;
-  return { loja, motoboy: loja, acombinar: false };
+  return {
+    loja:      FALLBACK_FRETE[freteIndex],
+    motoboy:   FALLBACK_FRETE[freteIndex],
+    acombinar: false,
+  };
 }
 
-// ── Verifica se loja está aberta pelos horários semanais ──────────────────
+function calcularFreteSemLocalizacao(
+  tabelaFrete: Array<{ loja: number; motoboy: number; acombinar?: boolean }> | null
+): { loja: number; motoboy: number; acombinar: boolean } {
+  const idx = 2;
+  if (tabelaFrete?.[idx]?.acombinar) {
+    return { loja: 0, motoboy: 0, acombinar: true };
+  }
+  if (tabelaFrete?.[idx]) {
+    return {
+      loja:      Number(tabelaFrete[idx].loja)    || 0,
+      motoboy:   Number(tabelaFrete[idx].motoboy) || 0,
+      acombinar: false,
+    };
+  }
+  return { loja: 12000, motoboy: 12000, acombinar: false };
+}
+
 function lojaEstaAberta(
   lojaAberta: boolean,
-  horarios: Record<string, { aberto: boolean; inicio: string; fim: string }> | null
+  horarios: Record<string, { fechado: boolean; turnos: Array<{ abre: string; fecha: string }> }> | null
 ): boolean {
-  // Se admin desativou manualmente, respeita
   if (!lojaAberta) return false;
+  if (!horarios || Object.keys(horarios).length === 0) return true;
 
-  // Se não há grade horária configurada, usa apenas a flag manual
-  if (!horarios) return true;
+  const agora = new Date();
+  const agoraPy = new Date(agora.getTime() - 3 * 3600 * 1000);
 
-  // Assunção: UTC-3 permanente (aboliu horário de verão em 2024)
-  const agora   = new Date();
-  const agoraParaguai = new Date(agora.getTime() - 3 * 3600 * 1000);
-  const dias    = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
-  const diaKey  = dias[agoraParaguai.getUTCDay()];
-  const config  = horarios[diaKey];
+  const diaKeys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+  const diaKey  = diaKeys[agoraPy.getUTCDay()];
+  const cfg     = horarios[diaKey];
 
-  if (!config || !config.aberto) return false;
+  if (!cfg) return true;
+  if (cfg.fechado === true) return false;
 
-  const [hIni, mIni] = config.inicio.split(":").map(Number);
-  const [hFim, mFim] = config.fim.split(":").map(Number);
-  const minAtual = agoraParaguai.getUTCHours() * 60 + agoraParaguai.getUTCMinutes();
-  const minIni   = hIni * 60 + mIni;
-  const minFim   = hFim * 60 + mFim;
+  const turnos = (cfg.turnos || []).filter((t) => t.abre && t.fecha);
+  if (turnos.length === 0) return true;
 
-  // Suporte a virada de meia-noite (ex: 20:00–02:00)
-  if (minFim < minIni) {
-    return minAtual >= minIni || minAtual < minFim;
-  }
-  return minAtual >= minIni && minAtual < minFim;
+  const minAtual = agoraPy.getUTCHours() * 60 + agoraPy.getUTCMinutes();
+
+  return turnos.some((t) => {
+    const [hI, mI] = t.abre.split(":").map(Number);
+    const [hF, mF] = t.fecha.split(":").map(Number);
+    const ini = hI * 60 + mI;
+    const fim = hF * 60 + mF;
+    if (fim < ini) return minAtual >= ini || minAtual < fim;
+    return minAtual >= ini && minAtual < fim;
+  });
 }
 
-// ── Handler ───────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -128,15 +131,12 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // ── Carrega configurações ─────────────────────────────────────────────
     const { data: cfg } = await supa
       .from("configuracoes")
-      .select("tabela_frete, coord_lat, coord_lng, limite_distancia_km, loja_aberta, horarios_semanais")
+      .select("tabela_frete, coord_lat, coord_lng, limite_distancia_km, loja_aberta, horarios_semanais, bloquear_venda_sem_caixa")
       .single();
 
-    // ── Verifica se a loja está aberta ────────────────────────────────────
-    // Pedidos do tipo "balcao" feitos pelo PDV físico ignoram o horário —
-    // a loja física pode estar atendendo mesmo fora do horário de delivery.
+    // ── Verifica se a loja está aberta ──────────────────────────
     const isAppDelivery = payload.tipo_entrega !== "balcao";
     if (isAppDelivery) {
       const aberta = lojaEstaAberta(
@@ -151,6 +151,33 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Trava de caixa fechado (se ativada em configuracoes) ────
+    //   Por padrão é TRUE para PDV/balcão. Para o app do cliente,
+    //   só trava se o admin ativar explicitamente a flag
+    //   `bloquear_venda_sem_caixa` em configuracoes.
+    const _deveVerificarCaixa =
+      payload.tipo_entrega === "balcao" ||
+      cfg?.bloquear_venda_sem_caixa === true;
+
+    if (_deveVerificarCaixa) {
+      const { data: sessao } = await supa
+        .from("sessoes_caixa")
+        .select("id")
+        .is("fechado_em", null)
+        .order("aberto_em", { ascending: false })
+        .limit(1);
+
+      if (!sessao || sessao.length === 0) {
+        return new Response(
+          JSON.stringify({
+            error: "Caixa fechado. Abra o caixa antes de registrar vendas.",
+            code: "CAIXA_FECHADO",
+          }),
+          { status: 422, headers: { ...CORS, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const tabelaFrete  = cfg?.tabela_frete       ?? null;
     const limiteDistKm = cfg?.limite_distancia_km ?? null;
     const coordLoja = {
@@ -158,54 +185,79 @@ Deno.serve(async (req) => {
       lng: parseFloat(cfg?.coord_lng ?? "0") || 0,
     };
 
-    // ── Validação de frete ────────────────────────────────────────────────
-    let freteFinal     = payload.frete_cobrado_cliente ?? 0;
-    let freteMotoboy   = payload.frete_motoboy         ?? 0;
+    let freteFinal     = 0;
+    let freteMotoboy   = 0;
     let freteACombinar = false;
 
-    if (payload.tipo_entrega === "delivery" && payload.geo_lat && payload.geo_lng) {
-      const lat = parseFloat(payload.geo_lat);
-      const lng = parseFloat(payload.geo_lng);
+    if (payload.tipo_entrega === "delivery") {
+      if (!payload.geo_lat || !payload.geo_lng) {
+        const r = calcularFreteSemLocalizacao(tabelaFrete);
+        freteFinal     = r.loja;
+        freteMotoboy   = r.motoboy;
+        freteACombinar = r.acombinar;
+      } else if (!coordLoja.lat || !coordLoja.lng) {
+        const r = calcularFreteSemLocalizacao(tabelaFrete);
+        freteFinal     = r.loja;
+        freteMotoboy   = r.motoboy;
+        freteACombinar = r.acombinar;
+      } else {
+        const lat = parseFloat(payload.geo_lat);
+        const lng = parseFloat(payload.geo_lng);
+        const dist = await distanciaPelaRota(coordLoja.lat, coordLoja.lng, lat, lng);
 
-      let dist = await distanciaPelaRota(coordLoja.lat, coordLoja.lng, lat, lng);
-      if (dist === null) dist = distanciaReta(coordLoja.lat, coordLoja.lng, lat, lng);
-
-      // Rejeita se além do limite configurado
-      if (limiteDistKm && dist > limiteDistKm) {
-        return new Response(
-          JSON.stringify({ error: `Distância (${dist.toFixed(1)}km) excede o limite de entrega (${limiteDistKm}km).` }),
-          { status: 422, headers: { ...CORS, "Content-Type": "application/json" } }
-        );
-      }
-
-      const esperado = calcularFreteEsperado(dist, tabelaFrete);
-
-      if (esperado.acombinar) {
-        freteFinal     = 0;
-        freteMotoboy   = 0;
-        freteACombinar = true;
-      } else if (payload.frete_cobrado_cliente < esperado.loja) {
-        console.warn(`[validar-pedido] Frete corrigido: enviado=${payload.frete_cobrado_cliente} esperado=${esperado.loja} dist=${dist.toFixed(2)}km`);
-        freteFinal   = esperado.loja;
-        freteMotoboy = esperado.motoboy;
+        if (dist === null || !Number.isFinite(dist) || dist <= 0) {
+          const r = calcularFreteSemLocalizacao(tabelaFrete);
+          freteFinal     = r.loja;
+          freteMotoboy   = r.motoboy;
+          freteACombinar = r.acombinar;
+        } else {
+          if (limiteDistKm && dist > limiteDistKm) {
+            return new Response(
+              JSON.stringify({ error: `Distância (${dist.toFixed(1)}km) excede o limite de entrega (${limiteDistKm}km).` }),
+              { status: 422, headers: { ...CORS, "Content-Type": "application/json" } }
+            );
+          }
+          const r = calcularFreteEsperado(dist, tabelaFrete);
+          freteFinal     = r.loja;
+          freteMotoboy   = r.motoboy;
+          freteACombinar = r.acombinar;
+        }
       }
     }
 
-    // ── Monta total_geral com TODOS os descontos ──────────────────────────
-    // CORREÇÃO: versão anterior ignorava desconto_pdv_valor e cashback_valor,
-    // gravando total incorreto no banco.
-    const subtotal          = payload.subtotal          ?? 0;
-    const descontoCupom     = payload.desconto_cupom    ?? 0;
-    const descontoPdv       = payload.desconto_pdv_valor ?? 0;
-    const descontoCashback  = payload.cashback_valor    ?? 0;
-    const freteParaTotal    = payload.tipo_entrega === "delivery" ? freteFinal : 0;
+    // ── Idempotência ─────────────────────────────────────────────
+    const idempotencyKey = payload.idempotency_key as string | undefined;
+    if (idempotencyKey) {
+      const { data: existing } = await supa
+        .from("pedidos")
+        .select("id, frete_cobrado_cliente, frete_motoboy, frete_a_combinar")
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (existing) {
+        return new Response(
+          JSON.stringify({
+            id: existing.id,
+            frete_cobrado_cliente: existing.frete_cobrado_cliente,
+            frete_motoboy: existing.frete_motoboy,
+            frete_a_combinar: existing.frete_a_combinar,
+            duplicate: true,
+          }),
+          { status: 200, headers: { ...CORS, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    const subtotal         = Number(payload.subtotal          ?? 0);
+    const descontoCupom    = Number(payload.desconto_cupom    ?? 0);
+    const descontoPdv      = Number(payload.desconto_pdv_valor ?? 0);
+    const descontoCashback = Number(payload.cashback_valor    ?? 0);
+    const freteParaTotal   = payload.tipo_entrega === "delivery" ? freteFinal : 0;
 
     const totalGeral = Math.max(
       0,
       subtotal - descontoCupom - descontoPdv - descontoCashback + freteParaTotal
     );
 
-    // ── Monta pedido ──────────────────────────────────────────────────────
     const pedido = {
       ...payload,
       frete_cobrado_cliente: freteFinal,
@@ -221,7 +273,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (error) {
-      console.error("[validar-pedido] Erro:", error);
+      console.error("[validar-pedido] Erro ao inserir:", error);
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 500, headers: { ...CORS, "Content-Type": "application/json" } }
@@ -229,7 +281,12 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ id: salvo.id, frete_cobrado_cliente: freteFinal, frete_a_combinar: freteACombinar }),
+      JSON.stringify({
+        id: salvo.id,
+        frete_cobrado_cliente: freteFinal,
+        frete_motoboy: freteMotoboy,
+        frete_a_combinar: freteACombinar,
+      }),
       { status: 200, headers: { ...CORS, "Content-Type": "application/json" } }
     );
 

@@ -1,10 +1,10 @@
 // ─────────────────────────────────────────────────────────────
 //  Service Worker — versão bump força invalidação de cache.
 //  Sempre que fizer deploy de novo código:
-//    1. Incremente CACHE_NAME (ex: v7, v8…)
+//    1. Incremente CACHE_NAME (ex: v1.4, v1.5…)
 //    2. O SW antigo detecta a diferença no activate e apaga os caches velhos.
 // ─────────────────────────────────────────────────────────────
-const CACHE_NAME = "saojose-v1.3"; // ← bump aqui a cada deploy
+const CACHE_NAME = "laoficina-v1.0"; // ← BUMP obrigatório
 
 const BLOCKED_ORIGINS = [
   "instagram.",
@@ -24,6 +24,9 @@ const ASSETS_TO_CACHE = [
   "/app.js",
   "/style.css",
   "/supabaseClient.js",
+  "/varejoUtils.js",        // ← ADICIONADO
+  "/freteUtils.js",         // ← ADICIONADO
+  "/translations.js",       // ← ADICIONADO
   "/turnos.html",
   "/ficha-tecnica.js",
   "/estatisticas.js",
@@ -47,6 +50,9 @@ const NETWORK_FIRST = [
   "/mensalistas.js",
   "/supabaseClient.js",
   "/style.css",
+  "/varejoUtils.js",        // ← ADICIONADO — crítica para o app
+  "/freteUtils.js",         // ← ADICIONADO — crítica para o app
+  "/translations.js",       // ← ADICIONADO — crítica para o app
 ];
 
 self.addEventListener("install", (event) => {
