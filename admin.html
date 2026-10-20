@@ -246,6 +246,11 @@
           <span class="sb-label" data-i18n="sidebar.cozinha">Separação</span>
         </div>
 
+        <div class="sb-menu-item menu-item" id="menu-notas" onclick="showTab('notas', event)">
+          <i class="fas fa-file-invoice-dollar"></i>
+          <span class="sb-label" data-i18n="sidebar.notas">Notas / Fiado</span>
+        </div>
+
         <div class="sb-menu-item menu-item restrito-gerente" id="menu-equipe" onclick="showTab('equipe', event)">
           <i class="fas fa-users"></i>
           <span class="sb-label" data-i18n="sidebar.equipe">Equipe</span>
@@ -259,12 +264,12 @@
           <span class="sb-label" data-i18n="sidebar.produtos">Produtos</span>
         </div>
 
-        <div class="sb-menu-item menu-item" onclick="showTab('categorias', event)">
+        <div class="sb-menu-item menu-item" id="menu-categorias" onclick="showTab('categorias', event)">
           <i class="fas fa-tags"></i>
           <span class="sb-label" data-i18n="sidebar.categorias">Categorias</span>
         </div>
 
-        <div class="sb-menu-item menu-item" onclick="showTab('motoboys', event)">
+        <div class="sb-menu-item menu-item" id="menu-motoboys" onclick="showTab('motoboys', event)">
           <i class="fas fa-motorcycle"></i>
           <span class="sb-label" data-i18n="sidebar.motoboys">Motoboys</span>
         </div>
@@ -455,6 +460,82 @@
         <!-- legado para JS existente -->
         <table id="tabela-ranking" style="display:none"><tbody></tbody></table>
       </div>
+
+      <!-- ═══════════════════ ABA Na nota ═══════════════════ -->
+
+<!-- ═══════════════════════════════════════════════════════════════
+     ABA: NOTAS / FIADO
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="notas" class="tab-content">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+    <div>
+      <h2 class="section-title" style="margin:0">🧾 Contas na Nota (Fiado)</h2>
+      <p style="font-size:0.85rem;color:#6b7280;margin-top:4px">Gerencie os pedidos pendentes, envie cobranças e dê baixa quando o cliente pagar.</p>
+    </div>
+    <button onclick="notasAvisarTodosPendentes()" class="btn btn-primary" style="background:#25D366;border-color:#25D366;color:#fff">
+      <i class="fab fa-whatsapp"></i> Avisar Todos Pendentes
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div id="notas-loading" style="display:none;justify-content:center;align-items:center;padding:40px;gap:12px;color:#666">
+    <i class="fas fa-spinner fa-spin fa-2x"></i> <span>Cargando cuentas...</span>
+  </div>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px">
+    <div class="card" style="padding:16px;border-left:4px solid #3b82f6">
+      <div style="font-size:0.75rem;color:#6b7280;font-weight:700;text-transform:uppercase">Clientes</div>
+      <div id="notas-kpi-clientes" style="font-size:1.4rem;font-weight:800;color:#1e293b;margin-top:4px">0</div>
+    </div>
+    <div class="card" style="padding:16px;border-left:4px solid #ef4444">
+      <div style="font-size:0.75rem;color:#6b7280;font-weight:700;text-transform:uppercase">Total em Aberto</div>
+      <div id="notas-kpi-aberto" style="font-size:1.4rem;font-weight:800;color:#dc2626;margin-top:4px">Gs 0</div>
+    </div>
+    <div class="card" style="padding:16px;border-left:4px solid #10b981">
+      <div style="font-size:0.75rem;color:#6b7280;font-weight:700;text-transform:uppercase">Total Já Quitado</div>
+      <div id="notas-kpi-quitado" style="font-size:1.4rem;font-weight:800;color:#059669;margin-top:4px">Gs 0</div>
+    </div>
+    <div class="card" style="padding:16px;border-left:4px solid #f59e0b">
+      <div style="font-size:0.75rem;color:#6b7280;font-weight:700;text-transform:uppercase">Clientes com Pendência</div>
+      <div id="notas-kpi-pendentes" style="font-size:1.4rem;font-weight:800;color:#d97706;margin-top:4px">0</div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card" style="padding:16px;margin-bottom:20px;background:#f8fafc">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:200px">
+        <label style="font-size:0.75rem;font-weight:700;color:#475569;display:block;margin-bottom:4px">Buscar Cliente</label>
+        <input type="text" id="notas-busca" class="form-control" placeholder="Nome ou telefone..." oninput="notasRenderKPIs();notasRenderLista()">
+      </div>
+      <div style="width:140px">
+        <label style="font-size:0.75rem;font-weight:700;color:#475569;display:block;margin-bottom:4px">De</label>
+        <input type="date" id="notas-filtro-inicio" class="form-control" onchange="notasAplicarFiltroPeriodo()">
+      </div>
+      <div style="width:140px">
+        <label style="font-size:0.75rem;font-weight:700;color:#475569;display:block;margin-bottom:4px">Até</label>
+        <input type="date" id="notas-filtro-fim" class="form-control" onchange="notasAplicarFiltroPeriodo()">
+      </div>
+      <div style="width:150px">
+        <label style="font-size:0.75rem;font-weight:700;color:#475569;display:block;margin-bottom:4px">Status</label>
+        <select id="notas-filtro-status" class="form-control" onchange="notasFiltrar()">
+          <option value="pendente">🔴 Em Aberto</option>
+          <option value="quitado">🟢 Quitados</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary" onclick="notasLimparFiltroPeriodo()" style="height:38px">
+        Limpar
+      </button>
+    </div>
+  </div>
+
+  <!-- Lista de Clientes -->
+  <div id="notas-lista">
+    <!-- Preenchido pelo notas.js -->
+  </div>
+</div>
 
       <div id="pedidos" class="tab-content">
         <!-- CABEÇALHO PEDIDOS -->
@@ -785,36 +866,69 @@
               </div>
               <input type="hidden" id="balcao-tipo-entrega" value="balcao">
 
-              <!-- Dados cliente (recolhido por padrão) -->
+                            <!-- Dados cliente (recolhido por padrão) -->
               <div class="pdv-dir-dados">
-                <div class="pdv-dado-row">
-                  <div style="flex:1">
-                    <label class="pdv-dir-label">Cliente (opcional)</label>
-                    <input type="text" id="balcao-cliente" class="pdv-dir-input" placeholder="Nome do cliente" />
+                
+                <!-- 🔽 BLOCO EXCLUSIVO PARA NA NOTA (FIADO) 🔽 -->
+                <div id="pdv-bloco-nanota" style="display:none; background:#fffbeb; border:1.5px solid #fcd34d; border-radius:8px; padding:8px; margin-bottom:8px;">
+                  <div style="font-size:0.75rem; font-weight:700; color:#92400e; margin-bottom:6px;">
+                    📋 FIADO (NA NOTA) - CLIENTE OBRIGATÓRIO
                   </div>
-                </div>
-                <div>
-                  <label class="pdv-dir-label">Telefone</label>
-                  <input type="tel" id="balcao-telefone" class="form-control"
-                    placeholder="Ex: 0981234567"
-                    oninput="pdvTelefoneInput(this.value)" />
-
-                  <!-- Box de cashback -->
-                  <div id="pdv-cashback-box" style="display:none;background:#fff8e1;border:1.5px solid #ffd54f;
-                    border-radius:10px;padding:10px 12px;margin-top:6px;font-size:0.85rem">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+                  
+                  <input type="text" id="pdv-busca-cliente-nanota" class="pdv-dir-input" placeholder="Buscar por nome ou telefone..." 
+                         oninput="pdvBuscarClienteNaNota(this.value)" style="margin-bottom:6px; border-color:#fcd34d;">
+                  
+                  <div id="pdv-lista-clientes-nanota" style="display:none; max-height:120px; overflow-y:auto; background:#fff; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:6px;"></div>
+                  
+                  <div id="pdv-cliente-nanota-selecionado" style="display:none; background:#d1fae5; border:1px solid #10b981; border-radius:6px; padding:6px; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
                       <div>
-                        <div style="font-weight:700;color:#795548">💰 Cashback disponível</div>
-                        <div style="color:#555"><b id="pdv-cash-nome">—</b>: <span style="color:#1a7a2e;font-weight:700" id="pdv-cash-saldo">—</span></div>
+                        <div id="pdv-nanota-nome" style="font-size:0.85rem; font-weight:700; color:#065f46;">-</div>
+                        <div id="pdv-nanota-tel" style="font-size:0.75rem; color:#047857;">-</div>
                       </div>
-                      <button id="pdv-btn-usar-cash" onclick="pdvToggleCashback()"
-                        style="padding:7px 14px;background:#ff9800;color:#fff;border:none;border-radius:8px;
-                               font-weight:700;cursor:pointer;font-size:0.82rem">
-                        💰 Usar Cashback
-                      </button>
+                      <button type="button" onclick="pdvLimparClienteNaNota()" style="background:none;border:none;color:#ef4444;font-size:1.2rem;cursor:pointer;line-height:1;">×</button>
+                    </div>
+                  </div>
+
+                  <button type="button" onclick="pdvAbrirModalNovoClienteNaNota()" 
+                          style="width:100%; padding:6px; background:#fff; color:#92400e; border:1px dashed #fcd34d; border-radius:6px; font-weight:700; font-size:0.75rem; cursor:pointer;">
+                    + Cadastrar novo cliente
+                  </button>
+                </div>
+                <!-- 🔼 FIM DO BLOCO NA NOTA 🔼 -->
+
+                <!-- Inputs normais (vão ficar ocultos quando for NaNota) -->
+                <div id="pdv-dados-padrao">
+                  <div class="pdv-dado-row">
+                    <div style="flex:1">
+                      <label class="pdv-dir-label">Cliente (opcional)</label>
+                      <input type="text" id="balcao-cliente" class="pdv-dir-input" placeholder="Nome do cliente" />
+                    </div>
+                  </div>
+                  <div>
+                    <label class="pdv-dir-label">Telefone</label>
+                    <input type="tel" id="balcao-telefone" class="form-control"
+                      placeholder="Ex: 0981234567"
+                      oninput="pdvTelefoneInput(this.value)" />
+
+                    <!-- Box de cashback -->
+                    <div id="pdv-cashback-box" style="display:none;background:#fff8e1;border:1.5px solid #ffd54f;
+                      border-radius:10px;padding:10px 12px;margin-top:6px;font-size:0.85rem">
+                      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+                        <div>
+                          <div style="font-weight:700;color:#795548">💰 Cashback disponível</div>
+                          <div style="color:#555"><b id="pdv-cash-nome">—</b>: <span style="color:#1a7a2e;font-weight:700" id="pdv-cash-saldo">—</span></div>
+                        </div>
+                        <button id="pdv-btn-usar-cash" onclick="pdvToggleCashback()"
+                          style="padding:7px 14px;background:#ff9800;color:#fff;border:none;border-radius:8px;
+                                 font-weight:700;cursor:pointer;font-size:0.82rem">
+                          💰 Usar Cashback
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
+
               </div>
 
               <!-- Delivery row -->
@@ -897,6 +1011,7 @@
                   <option value="CartaoBR">💳🇧🇷 Cartão BR</option>
                   <option value="Pix">🟢 Pix</option>
                   <option value="Transferencia">🏦 Alias (PY)</option>
+                  <option value="NaNota">📋 Na Nota (Fiado)</option>
                   <option value="QrPy">📱 QR Paraguay</option>
                   <option value="Multipagamento">🔀 Dividir</option>
                 </select>
@@ -956,8 +1071,9 @@
       </div>
 
       <div id="financeiro" class="tab-content">
-  <h2 class="section-title" data-i18n="fin.title">💰 Controle Financeiro</h2>
-  <div id="badge-caixa-operador" style="font-size:0.82rem;font-weight:600;padding:6px 12px;background:var(--color-background-secondary);border-radius:8px;margin-bottom:12px;color:var(--color-text-secondary)"></div>
+        <h2 class="section-title" data-i18n="fin.title">💰 Controle Financeiro</h2>
+        <div id="badge-caixa-operador" style="font-size:0.82rem;font-weight:600;padding:6px 12px;background:var(--color-background-secondary);border-radius:8px;margin-bottom:12px;color:var(--color-text-secondary)">
+      </div>
 
   <!-- ===== FILTROS ===== -->
   <div class="filtro-bar">
@@ -1274,6 +1390,7 @@
               <select id="novo-user-cargo" class="form-control">
                 <option value="garcom" data-i18n="cargo.garcom">🍽️ Garçom</option>
                 <option value="funcionario" data-i18n="cargo.funcionario">👷 Funcionário</option>
+                <option value="socio">🤝 Sócio</option>
                 <option value="gerente" data-i18n="cargo.gerente">👔 Gerente</option>
                 <option value="dono" id="opt-cargo-dono" style="display:none" data-i18n="cargo.dono">🔑 Dono</option>
               </select>
@@ -1881,7 +1998,7 @@
         </div>
 
         <!-- ── ADMIN MASTER (apenas adminMaster) ─────────────── -->
-        <div id="card-adminmaster-cfg" class="card cfg-card" style="margin-top:16px;display:none;border:2px solid #e74c3c">
+        <!-- <div id="card-adminmaster-cfg" class="card cfg-card" style="margin-top:16px;display:none;border:2px solid #e74c3c">
           <div class="cfg-section-title" style="color:#e74c3c">
             <i class="fas fa-shield-alt"></i> Controle de Features (Admin Master)
             <small style="font-weight:400;color:#888;font-size:0.82rem;display:block;margin-top:4px">
@@ -1891,7 +2008,7 @@
           <div id="painel-features">
             <p style="color:#aaa;font-size:0.85rem">Carregando...</p>
           </div>
-        </div>
+        </div> -->
 
       </div><!-- /configuracoes -->
 
@@ -1924,6 +2041,7 @@
               <select id="am-cargo" class="form-control">
                 <option value="dono" data-i18n="cargo.dono">🔑 Dono</option>
                 <option value="gerente" data-i18n="cargo.gerente">👔 Gerente</option>
+                <option value="socio">🤝 Sócio</option>
                 <option value="funcionario" data-i18n="cargo.funcionario">👷 Funcionário</option>
                 <option value="garcom" data-i18n="cargo.garcom">🍽️ Garçom</option>
               </select>
@@ -2880,6 +2998,7 @@
     <script src="subscriptionService.js"></script>
     <script src="subscriptionUI.js"></script>
     <script src="subscriptionAdmin.js"></script>
+    <script src="notas.js"></script>
     <script src="varejoUtils.js"></script>
     <script src="freteUtils.js"></script>
     <script src="filiais.js"></script>
@@ -3812,6 +3931,33 @@
         </button>
       </div>
 
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL DE ATUALIZAÇÃO EM LOTE -->
+<div id="modal-bulk-update" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+  <div class="modal-content" style="max-width:800px; width:100%; margin:auto; background:#fff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:2px solid #eee; padding-bottom:12px;">
+      <h3 style="margin:0; font-size:1.2rem; color:#1a1a1a;"><i class="fas fa-layer-group" style="color:var(--primary)"></i> Atualização em Lote</h3>
+      <button onclick="fecharModalBulkUpdate()" style="background:none;border:none;font-size:1.8rem;cursor:pointer;color:#888;line-height:1;">×</button>
+    </div>
+
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:0.85rem; color:#166534;">
+      💡 <strong>Autosave ativado:</strong> Suas alterações são salvas em rascunho automaticamente. Se você fechar o modal sem querer, os dados estarão aqui quando reabrir.
+    </div>
+
+    <div id="bulk-update-list" style="max-height:60vh; overflow-y:auto; padding-right:4px;">
+      <!-- Produtos serão inseridos aqui via JS -->
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px; border-top:1px solid #eee; padding-top:16px;">
+      <button class="btn btn-secondary" onclick="fecharModalBulkUpdate()" style="padding:10px 20px; background:#f1f5f9; border:none; border-radius:8px; font-weight:600; cursor:pointer;">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarBulkUpdate()" id="btn-salvar-bulk" style="padding:10px 24px; background:var(--primary); color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer;">
+        <i class="fas fa-save"></i> Salvar Alterações
+      </button>
     </div>
 
   </div>

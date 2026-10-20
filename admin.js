@@ -145,11 +145,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Carrega features e aplica visibilidade das abas
     await _carregarFeaturesGlobais();
 
-    // Sócio: carrega suas permissões individuais ANTES de aplicar visibilidade
-    if (perfilUsuario === "socio") {
-      await _carregarPermissoesSocio();
-    }
-
     // Atualiza brand com nome do restaurante (carregado em _carregarFeaturesGlobais)
     const elBrand = document.getElementById("brand-text");
     if (elBrand) elBrand.textContent = (NOME_RESTAURANTE || "ADMIN") + " ADMIN";
@@ -215,7 +210,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         supabaseKey: typeof _SUPABASE_KEY !== "undefined" ? _SUPABASE_KEY : "",
         contatoFone: "595976771714",
         contatoNome: "SuporteLinkPY",
-        perfil: perfilUsuario,   // ← garante que adminMaster não seja bloqueado
+        perfil: perfilUsuario, // ← garante que adminMaster não seja bloqueado
       });
     }
 
@@ -275,7 +270,7 @@ window.testarStorage = async function () {
   const blob = await fetch(pixel).then((r) => r.blob());
   const file = new File([blob], "test.png", { type: "image/png" });
   try {
-    const url = await uploadImageToSupabase(file, 'produtos');
+    const url = await uploadImageToSupabase(file, "produtos");
     console.log("✅ Supabase Storage OK! URL de teste:", url);
     alert("✅ Supabase Storage funcionando!\nURL: " + url);
   } catch (e) {
@@ -287,9 +282,9 @@ window.testarStorage = async function () {
 // ========================================
 // SUPABASE STORAGE — UPLOAD DE IMAGENS
 // ========================================
-const SUPABASE_STORAGE_BUCKET = 'produtos';
-const IMAGE_MAX_SIZE    = 500;  // lado maior em px
-const IMAGE_WEBP_QUALITY = 80;  // qualidade WebP (0–100)
+const SUPABASE_STORAGE_BUCKET = "produtos";
+const IMAGE_MAX_SIZE = 500; // lado maior em px
+const IMAGE_WEBP_QUALITY = 80; // qualidade WebP (0–100)
 
 /**
  * Converte um File/Blob para WebP com redimensionamento proporcional.
@@ -301,7 +296,11 @@ const IMAGE_WEBP_QUALITY = 80;  // qualidade WebP (0–100)
  * @param {number} quality  - qualidade WebP 0-100 (default 80)
  * @returns {Promise<Blob>}
  */
-function convertToWebP(file, maxSize = IMAGE_MAX_SIZE, quality = IMAGE_WEBP_QUALITY) {
+function convertToWebP(
+  file,
+  maxSize = IMAGE_MAX_SIZE,
+  quality = IMAGE_WEBP_QUALITY,
+) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -318,17 +317,20 @@ function convertToWebP(file, maxSize = IMAGE_MAX_SIZE, quality = IMAGE_WEBP_QUAL
             height = maxSize;
           }
         }
-        const canvas = document.createElement('canvas');
-        canvas.width  = width;
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
         canvas.height = height;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         // Fundo branco — WebP transparente pode renderizar preto em impressão
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob(
-          (blob) => (blob ? resolve(blob) : reject(new Error('Falha na conversão para WebP'))),
-          'image/webp',
+          (blob) =>
+            blob
+              ? resolve(blob)
+              : reject(new Error("Falha na conversão para WebP")),
+          "image/webp",
           quality / 100,
         );
       };
@@ -351,21 +353,26 @@ function convertToWebP(file, maxSize = IMAGE_MAX_SIZE, quality = IMAGE_WEBP_QUAL
  * @param {string} folder - subpasta: 'produtos' | 'sabores' | 'banners' | 'icones' | 'logos'
  * @returns {Promise<string>}
  */
-async function uploadImageToSupabase(file, folder = 'produtos') {
+async function uploadImageToSupabase(file, folder = "produtos") {
   // ── 1. Validações ─────────────────────────────────────────
-  const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  const tiposPermitidos = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ];
   if (!tiposPermitidos.includes(file.type)) {
-    throw new Error('Formato inválido. Use JPG, PNG, WEBP ou GIF.');
+    throw new Error("Formato inválido. Use JPG, PNG, WEBP ou GIF.");
   }
   if (file.size > 10 * 1024 * 1024) {
-    throw new Error('Imagem muito grande. Máximo 10MB antes da compressão.');
+    throw new Error("Imagem muito grande. Máximo 10MB antes da compressão.");
   }
 
   // ── 2. Converte para WebP redimensionado ──────────────────
   const webpBlob = await convertToWebP(file);
 
   // ── 3. Gera nome único ────────────────────────────────────
-  const ts   = Date.now();
+  const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
   const path = `${folder}/${ts}-${rand}.webp`;
 
@@ -373,26 +380,33 @@ async function uploadImageToSupabase(file, folder = 'produtos') {
   const { data, error } = await supa.storage
     .from(SUPABASE_STORAGE_BUCKET)
     .upload(path, webpBlob, {
-      contentType: 'image/webp',
-      cacheControl: '31536000', // 1 ano
+      contentType: "image/webp",
+      cacheControl: "31536000", // 1 ano
       upsert: false,
     });
 
   if (error) {
     // Diagnóstico amigável quando o bucket ainda não foi criado
-    if (error.message?.includes('Bucket not found') || error.statusCode === 404) {
+    if (
+      error.message?.includes("Bucket not found") ||
+      error.statusCode === 404
+    ) {
       throw new Error(
-        'Bucket "' + SUPABASE_STORAGE_BUCKET + '" não existe no Supabase Storage.\n\n' +
-        'Crie-o em: Dashboard → Storage → New bucket → nome "' + SUPABASE_STORAGE_BUCKET + '" → marque "Public bucket".'
+        'Bucket "' +
+          SUPABASE_STORAGE_BUCKET +
+          '" não existe no Supabase Storage.\n\n' +
+          'Crie-o em: Dashboard → Storage → New bucket → nome "' +
+          SUPABASE_STORAGE_BUCKET +
+          '" → marque "Public bucket".',
       );
     }
-    throw new Error('Supabase Storage: ' + error.message);
+    throw new Error("Supabase Storage: " + error.message);
   }
 
   // ── 5. Retorna URL pública ────────────────────────────────
-  const { data: { publicUrl } } = supa.storage
-    .from(SUPABASE_STORAGE_BUCKET)
-    .getPublicUrl(data.path);
+  const {
+    data: { publicUrl },
+  } = supa.storage.from(SUPABASE_STORAGE_BUCKET).getPublicUrl(data.path);
 
   return publicUrl;
 }
@@ -401,14 +415,14 @@ async function uploadImageToSupabase(file, folder = 'produtos') {
  * @deprecated Use `uploadImageToSupabase(file, folder)` — mantido só para retrocompatibilidade.
  */
 async function uploadImageToImgbb(file) {
-  return uploadImageToSupabase(file, 'produtos');
+  return uploadImageToSupabase(file, "produtos");
 }
 
 /**
  * @deprecated Use `uploadImageToSupabase(file, folder)` — mantido só para retrocompatibilidade.
  */
 async function uploadImageToCloudinary(file) {
-  return uploadImageToSupabase(file, 'produtos');
+  return uploadImageToSupabase(file, "produtos");
 }
 
 // =========================================
@@ -475,6 +489,8 @@ function showTab(tabId, event) {
       showSubTab("lista-produtos-wrapper");
     }
   }
+
+  if (realTabId === "notas") notasInicializar();
 
   // 6. Carregamento de dados
   if (realTabId === "pedidos") {
@@ -618,42 +634,23 @@ function _aplicarFormasPagamentoPDV(features) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Permissões do perfil Sócio (cache em memória)
-//  Formato do cache: { abas: ["dashboard","pdv",...] }
-//  Populado por _carregarPermissoesSocio() no boot do painel.
-// ─────────────────────────────────────────────────────────────
-let _permissoesSocio = null;
-
-/**
- * Consulta o banco e cacheia a lista de abas que o Sócio
- * logado pode ver. Chamar 1x no boot do painel.
- * Usa a RPC get_minhas_abas() que já resolve:
- *   - adminMaster/dono → todas as abas
- *   - socio → apenas permissoes_customizadas.abas
- *   - demais → todas (features_ativas filtra no front)
- */
-async function _carregarPermissoesSocio() {
-  try {
-    const { data, error } = await supa.rpc("get_minhas_abas");
-    if (error) {
-      console.warn("[Sócio] RPC get_minhas_abas falhou:", error.message);
-      _permissoesSocio = { abas: [] };  // nega tudo por padrão
-      return;
-    }
-    _permissoesSocio = {
-      abas: Array.isArray(data) ? data : [],
-    };
-    console.log("[Sócio] Permissões carregadas:", _permissoesSocio.abas);
-  } catch (e) {
-    console.warn("[Sócio] Erro ao carregar permissões:", e.message);
-    _permissoesSocio = { abas: [] };
-  }
-}
-
-
 function _feat(categoria, chave) {
-  if (!FEATURES_ATIVAS) return true; // sem config = tudo ativo
+  if (!FEATURES_ATIVAS) return true;
+
+  if (categoria === "tabs" && perfilUsuario) {
+    const pCargo = FEATURES_ATIVAS?.permissoes_cargo?.[perfilUsuario];
+
+    // 🔒 REGRA DE SEGURANÇA PARA O SÓCIO:
+    // Se for sócio e não houver configuração salva para ele, bloqueia tudo.
+    if (perfilUsuario === "socio" && (!pCargo || !Array.isArray(pCargo.tabs))) {
+      return false;
+    }
+
+    if (pCargo && Array.isArray(pCargo.tabs)) {
+      return pCargo.tabs.includes(chave);
+    }
+  }
+
   const cat = FEATURES_ATIVAS[categoria];
   if (!cat) return true;
   return cat[chave] !== false;
@@ -661,59 +658,136 @@ function _feat(categoria, chave) {
 
 function _aplicarVisibilidadeAbas() {
   const mapa = {
-    "menu-pedidos":        "pedidos",
-    "menu-cozinha":        "cozinha",
-    "menu-pdv":            "pdv",
-    "menu-financeiro":     "financeiro",
-    "menu-inventario":     "inventario",
-    "menu-equipe":         "equipe",
-    "menu-configuracoes":  "configuracoes",
-    "menu-dashboard":      "dashboard",
-    "menu-estatisticas":   "estatisticas",
-    "menu-ficha-tecnica":  "ficha-tecnica",
-    "menu-crm":            "crm",
-    "menu-turnos":         "turnos",
-    "menu-produtos":       "produtos",
-    "menu-mensalistas":    "mensalistas",
-    "menu-filiais":        "filiais",
+    "menu-pedidos": "pedidos",
+    "menu-cozinha": "cozinha",
+    "menu-pdv": "pdv",
+    "menu-financeiro": "financeiro",
+    "menu-inventario": "inventario",
+    "menu-equipe": "equipe",
+    "menu-configuracoes": "configuracoes",
+    "menu-dashboard": "dashboard",
+    "menu-estatisticas": "estatisticas",
+    "menu-ficha-tecnica": "ficha-tecnica",
+    "menu-crm": "crm",
+    "menu-turnos": "turnos",
+    "menu-produtos": "produtos",
+    "menu-categorias": "categorias",
+    "menu-motoboys": "motoboys",
+    "menu-mensalistas": "mensalistas",
+    "menu-filiais": "filiais",
+    "menu-notas": "notas",
+    "menu-facturacion": "facturacion",
   };
 
-  // adminMaster: vê tudo, ignora features e permissões
   if (perfilUsuario === "adminMaster") return;
 
-  // ── Sócio: aplica DOIS filtros em conjunto ────────────────
-  //  1. features_ativas (bloqueio global da loja)
-  //  2. permissoes_customizadas.abas (bloqueio individual do sócio)
-  if (perfilUsuario === "socio") {
-    const permitidas = _permissoesSocio?.abas || [];
-
-    Object.entries(mapa).forEach(([menuId, chave]) => {
-      const el = document.getElementById(menuId);
-      if (!el) return;
-
-      const bloqueadoPorFeature = !_feat("tabs", chave);
-      const naoPermitidoAoSocio  = !permitidas.includes(chave);
-
-      if (bloqueadoPorFeature || naoPermitidoAoSocio) {
-        el.style.display = "none";
-      }
-    });
-    return;
-  }
-
-  // ── Demais cargos (gerente/funcionario/garcom) ────────────
-  //  Só o filtro global de features_ativas se aplica
   Object.entries(mapa).forEach(([menuId, chave]) => {
     const el = document.getElementById(menuId);
-    if (el && !_feat("tabs", chave)) el.style.display = "none";
+    if (!el) {
+      console.warn(`[Menu] Elemento com ID ${menuId} não encontrado no HTML!`);
+      return;
+    }
+    const visivel = _feat("tabs", chave);
+
+    // Usa important para evitar que regras CSS de flexbox mostrem o item
+    if (visivel) {
+      el.style.setProperty("display", "flex", "important");
+    } else {
+      el.style.setProperty("display", "none", "important");
+    }
   });
+
+  _aplicarFuncionalidades();
+
+  // Redirecionamento inteligente
+  setTimeout(() => {
+    const activeMenu = document.querySelector(".sb-menu-item.active");
+    if (
+      activeMenu &&
+      (activeMenu.style.display === "none" || activeMenu.style.display === "")
+    ) {
+      const firstVisible = document.querySelector(
+        '.sb-menu-item[style*="display: flex"]',
+      );
+      if (firstVisible && firstVisible !== activeMenu) {
+        firstVisible.click();
+      }
+    }
+  }, 100);
 }
+
+function _aplicarFuncionalidades() {
+  const f = FEATURES_ATIVAS?.funcionalidades;
+  if (!f) return; // sem config = tudo ativo
+
+  // Tipos de entrega no PDV
+  ["delivery", "retirada", "local", "balcao"].forEach((tipo) => {
+    if (f[tipo] === false) {
+      document
+        .querySelectorAll(`.pdv-tipo-tab[data-tipo="${tipo}"]`)
+        .forEach((el) => {
+          el.style.display = "none";
+        });
+    }
+  });
+
+  // Multipagamento: oculta a opção no select do PDV
+  if (f.multipagamento === false) {
+    const selPag = document.getElementById("balcao-pag");
+    if (selPag) {
+      Array.from(selPag.options).forEach((opt) => {
+        if (opt.value === "Multipagamento") {
+          opt.style.display = "none";
+          if (selPag.value === "Multipagamento") selPag.value = "Efetivo";
+        }
+      });
+    }
+  }
+
+  // Cupons: oculta card de cupons
+  if (f.cupons === false) {
+    const cupomCard = document.getElementById("card-cupons-cfg");
+    if (cupomCard) cupomCard.style.display = "none";
+    document
+      .querySelectorAll('[onclick*="cupom"], [onclick*="Cupom"]')
+      .forEach((el) => {
+        el.style.display = "none";
+      });
+  }
+
+  // Factura: oculta campos de factura no checkout
+  if (f.factura === false) {
+    document
+      .querySelectorAll('.box-factura, #box-factura, [data-feat-ui="factura"]')
+      .forEach((el) => {
+        el.style.display = "none";
+      });
+  }
+}
+
+function _podeCancelarDireto() {
+  // adminMaster sempre pode
+  if (perfilUsuario === "adminMaster") return true;
+
+  const pCargo = FEATURES_ATIVAS?.permissoes_cargo?.[perfilUsuario];
+  if (pCargo && "pode_cancelar_direto" in pCargo) {
+    return pCargo.pode_cancelar_direto === true;
+  }
+
+  // fallback: lógica original
+  return ["dono", "gerente"].includes(perfilUsuario);
+}
+
+// Salva features (adminMaster only)
 // Salva features (adminMaster only)
 async function salvarFeatures() {
   if (perfilUsuario !== "adminMaster") return alert(t("alert.acesso_negado"));
+
   const tabs = {},
     tipos = {},
-    funcs = {};
+    funcs = {},
+    pagamentos = {};
+
   document.querySelectorAll("[data-feat-tab]").forEach((el) => {
     tabs[el.dataset.featTab] = el.checked;
   });
@@ -723,180 +797,488 @@ async function salvarFeatures() {
   document.querySelectorAll("[data-feat-func]").forEach((el) => {
     funcs[el.dataset.featFunc] = el.checked;
   });
-  const pagamentos = {};
   document.querySelectorAll("[data-feat-pag]").forEach((el) => {
     pagamentos[el.dataset.featPag] = el.checked;
   });
+
+  // ── Permissões granulares por cargo (agora incluindo socio) ─────
+  const permissoes_cargo = {};
+  const CARGOS_PERM = ["dono", "gerente", "socio", "funcionario", "garcom"]; // <-- SÓCIO ADICIONADO
+
+  const ABAS_PERM = [
+    "pedidos",
+    "cozinha",
+    "pdv",
+    "financeiro",
+    "inventario",
+    "produtos",
+    "categorias",
+    "motoboys", // <-- ADICIONADOS
+    "equipe",
+    "configuracoes",
+    "dashboard",
+    "estatisticas",
+    "ficha-tecnica",
+    "crm",
+    "mensalistas",
+    "turnos",
+    "notas",
+    "facturacion",
+    "filiais",
+  ];
+
+  CARGOS_PERM.forEach((cargo) => {
+    const tabsPermitidas = ABAS_PERM.filter((aba) => {
+      const el = document.querySelector(
+        `[data-perm-tab="${aba}"][data-perm-cargo="${cargo}"]`,
+      );
+      return el ? el.checked : true; // default: permitido
+    });
+    const podeCancel =
+      document.querySelector(`[data-perm-cancelar][data-perm-cargo="${cargo}"]`)
+        ?.checked ?? false;
+
+    permissoes_cargo[cargo] = {
+      tabs: tabsPermitidas,
+      pode_cancelar_direto: podeCancel,
+    };
+  });
+
   const features = {
     tabs,
     tipos_produto: tipos,
     funcionalidades: funcs,
     pagamentos,
+    permissoes_cargo,
   };
+
   const { error } = await supa
     .from("configuracoes")
     .update({ features_ativas: features })
     .gt("id", 0);
-  if (error) return alert("Erro: " + error.message);
+
+  if (error) return alert("Error: " + error.message);
   FEATURES_ATIVAS = features;
+
+  _aplicarFormasPagamentoPDV(features);
+  if (perfilUsuario !== "adminMaster") {
+    _aplicarVisibilidadeAbas();
+  }
+
   alert(t("alert.features_salvas"));
 }
 
-// Renderiza painel de features (adminMaster)
-//
-// ─────────────────────────────────────────────────────────────
-//  ARQUITETURA (fix do conflito entre abas):
-//
-//  O painel completo é renderizado APENAS em
-//  #painel-features-master (aba Admin Master).
-//
-//  O card #card-adminmaster-cfg (dentro de Configurações) NÃO
-//  duplica os checkboxes — vira um atalho visual que redireciona
-//  para a aba Admin Master.
-//
-//  Por quê:
-//  Antes, os mesmos atributos data-feat-* eram renderizados em
-//  DOIS lugares (#painel-features E #painel-features-master).
-//  salvarFeatures() usava document.querySelectorAll() global, que
-//  capturava AMBAS as cópias — o valor final dependia da ordem do
-//  DOM (o último sobrescrevia), silenciosamente descartando as
-//  edições feitas no outro painel.
-// ─────────────────────────────────────────────────────────────
+// Renderiza painel de features (adminMaster) - EXCLUSIVO NA ABA ADMIN MASTER
 async function renderPainelFeatures() {
-  const master   = document.getElementById("painel-features-master");
-  const shortcut = document.getElementById("painel-features");
-  if (!master && !shortcut) return;
+  // 🔧 Correção: Apenas renderiza no painel da aba Admin Master
+  const target = document.getElementById("painel-features-master");
+  if (!target) return;
 
   await _carregarFeaturesGlobais();
-  const f      = FEATURES_ATIVAS || {};
-  const tabs   = f.tabs            || {};
-  const tipos  = f.tipos_produto   || {};
-  const funcs  = f.funcionalidades || {};
-  const pags   = f.pagamentos      || {};
+  const f = FEATURES_ATIVAS || {};
+  const tabs = f.tabs || {};
+  const tipos = f.tipos_produto || {};
+  const funcs = f.funcionalidades || {};
+
+  const _chk = (attr, key, val, label, bg = "#f9f9f9") =>
+    `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;
+        background:${bg};border-radius:8px;cursor:pointer;
+        border:1.5px solid ${val !== false ? "#27ae60" : "#ddd"};transition:border .2s">
+      <input type="checkbox" ${attr}="${key}" ${val !== false ? "checked" : ""}
+        onchange="this.closest('label').style.borderColor=this.checked?'#27ae60':'#ddd'"
+        style="width:17px;height:17px;accent-color:#27ae60;flex-shrink:0">
+      <span style="font-size:0.85rem">${label}</span></label>`;
 
   const chkTabs = [
-    ["pedidos",         "Pedidos"],
-    ["cozinha",         "Cozinha/KDS"],
-    ["pdv",             "PDV Balcão"],
-    ["financeiro",      "Financeiro"],
-    ["inventario",      "Inventário"],
-    ["equipe",          "Equipe"],
-    ["configuracoes",   "Configurações"],
-    ["dashboard",       "Dashboard"],
-    ["turnos",          "Painel Turnos/TV"],
-    ["estatisticas",    "Estatísticas"],
-    ["ficha-tecnica",   "Ficha Técnica"],
-    ["crm",             "CRM Clientes"],
-    ["mensalistas",     "Mensalistas"],
-    ["filiais",         "Filiais"],
+    ["pedidos", "📋 Pedidos"],
+    ["cozinha", "👨‍🍳 Cozinha/KDS"],
+    ["pdv", "🖥️ PDV Balcão"],
+    ["financeiro", "💰 Financeiro"],
+    ["inventario", "📦 Inventário"],
+    ["produtos", "🍽️ Produtos"],
+    ["equipe", "👥 Equipe"],
+    ["configuracoes", "⚙️ Configurações"],
+    ["dashboard", "📊 Dashboard"],
+    ["estatisticas", "📈 Estatísticas"],
+    ["ficha-tecnica", "📝 Ficha Técnica"],
+    ["crm", "🤝 CRM Clientes"],
+    ["mensalistas", "🗓️ Mensalistas"],
+    ["turnos", "📺 Painel Turnos/TV"],
+    ["notas", "🧾 Notas/Facturas"],
+    ["facturacion", "🧮 Facturación"],
+    ["filiais", "🏬 Filiais"],
   ]
-    .map(
-      ([k, l]) => `<label style="display:flex;align-items:center;gap:8px;padding:6px;background:#f9f9f9;border-radius:6px">
-    <input type="checkbox" data-feat-tab="${k}" ${tabs[k] !== false ? "checked" : ""} style="width:18px;height:18px">
-    <span>${l}</span></label>`,
-    )
+    .map(([k, l]) => _chk("data-feat-tab", k, tabs[k], l, "#f0f9ff"))
     .join("");
 
   const chkTipos = [
-    ["padrao",     "Simples"],
-    ["bebida",     "Bebida"],
-    ["lanche",     "Lanche"],
-    ["pizza",      "Pizza"],
-    ["acai",       "Açaí"],
-    ["shake",      "Shake"],
-    ["suco",       "Suco"],
-    ["sorvete",    "Sorvete"],
-    ["montavel",   "Montável"],
-    ["combo",      "Combo"],
-    ["variacoes",  "Variações"],
-    ["kg",         "⚖️ Venda Kg"],
+    ["padrao", "📦 Simples"],
+    ["bebida", "🥤 Bebida"],
+    ["lanche", "🍔 Lanche"],
+    ["pizza", "🍕 Pizza"],
+    ["acai", "🍇 Açaí"],
+    ["shake", "🥤 Shake"],
+    ["suco", "🍊 Suco"],
+    ["sorvete", "🍦 Sorvete"],
+    ["montavel", "🥗 Montável"],
+    ["combo", "⭐ Combo"],
+    ["variacoes", "🎨 Multi-variação"],
+    ["kg", "⚖️ Venda por Kg"],
+    ["roupa", "👕 Roupa"],
+    ["eletronico", "🔌 Eletrônico"],
+    ["suplemento", "💪 Suplemento"],
+    ["pod", "☁️ Pod/Tabacaria"],
+    ["mercado", "🛒 Mercado"],
   ]
-    .map(
-      ([k, l]) => `<label style="display:flex;align-items:center;gap:8px;padding:6px;background:#f9f9f9;border-radius:6px">
-    <input type="checkbox" data-feat-tipo="${k}" ${tipos[k] !== false ? "checked" : ""} style="width:18px;height:18px">
-    <span>${l}</span></label>`,
-    )
+    .map(([k, l]) => _chk("data-feat-tipo", k, tipos[k], l, "#fdf9ff"))
+    .join("");
+
+  const pags = f.pagamentos || {};
+  const chkPags = [
+    ["Efetivo", "💵 Efectivo/Dinheiro"],
+    ["Cartao", "💳 Tarjeta (Débito + Crédito)"],
+    ["CartaoBR", "💳🇧🇷 Tarjeta BR (Débito + Crédito)"],
+    ["Pix", "🟢 Pix (BR)"],
+    ["Transferencia", "🏦 Alias/Transferência PY"],
+    ["QrMaquina", "📱 QR (Máquina + Celular + App)"],
+    ["Multipagamento", "🔀 Dividir Pagamento"],
+    ["Mensalista", "🎫 Mensalista"],
+    ["NaNota", "📋 Colocar na Nota"],
+  ]
+    .map(([k, l]) => _chk("data-feat-pag", k, pags[k], l, "#f0fff4"))
     .join("");
 
   const chkFuncs = [
-    ["delivery",         "Delivery"],
-    ["retirada",         "Retirada"],
-    ["local",            "Comer no Local"],
-    ["balcao",           "Balcão/PDV"],
-    ["cupons",           "Cupons"],
-    ["factura",          "Factura"],
-    ["multipagamento",   "Multipagamento"],
-    ["agendamento",      "Agendamento"],
+    ["delivery", "🛵 Delivery"],
+    ["retirada", "🏃 Retirada"],
+    ["local", "🍽️ Comer no Local"],
+    ["balcao", "🏪 Mostrador/PDV"],
+    ["cupons", "🎟️ Cupons"],
+    ["factura", "🧾 Factura PY"],
+    ["multipagamento", "🔀 Multipagamento"],
+    ["agendamento", "📅 Agendamento"],
   ]
-    .map(
-      ([k, l]) => `<label style="display:flex;align-items:center;gap:8px;padding:6px;background:#f9f9f9;border-radius:6px">
-    <input type="checkbox" data-feat-func="${k}" ${funcs[k] !== false ? "checked" : ""} style="width:18px;height:18px">
-    <span>${l}</span></label>`,
-    )
+    .map(([k, l]) => _chk("data-feat-func", k, funcs[k], l, "#fffbf0"))
     .join("");
 
-  const chkPags = [
-    ["Efetivo",         "💵 Efectivo/Dinheiro"],
-    ["Cartao",          "💳 Tarjeta PY"],
-    ["CartaoBR",        "💳🇧🇷 Cartão Brasileiro (R$)"],
-    ["Pix",             "🟢 Pix (BR)"],
-    ["Transferencia",   "🏦 Alias/Transferência PY"],
-    ["QrPy",            "📱 QR Paraguay"],
-    ["Multipagamento",  "🔀 Dividir Pagamento"],
-  ]
-    .map(
-      ([k, l]) =>
-        `<label style="display:flex;align-items:center;gap:8px;padding:6px;background:#f9f9f9;border-radius:6px">
-      <input type="checkbox" data-feat-pag="${k}" ${pags[k] !== false ? "checked" : ""} style="width:18px;height:18px">
-      <span>${l}</span></label>`,
-    )
-    .join("");
-
-  const html = `
-    <div style="display:grid;gap:20px">
-      <div>
-        <h4 style="margin-bottom:10px;color:#2c3e50">📂 Abas visíveis</h4>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">${chkTabs}</div>
-      </div>
-      <div>
-        <h4 style="margin-bottom:10px;color:#2c3e50">💳 Formas de Pagamento</h4>
-        <p style="font-size:0.8rem;color:#888;margin-bottom:8px">Controla o que aparece no app do cliente <strong>e</strong> no PDV</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">${chkPags}</div>
-      </div>
-      <div>
-        <h4 style="margin-bottom:10px;color:#2c3e50">🏷️ Tipos de produto permitidos</h4>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${chkTipos}</div>
-      </div>
-      <div>
-        <h4 style="margin-bottom:10px;color:#2c3e50">⚙️ Funcionalidades</h4>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">${chkFuncs}</div>
-      </div>
-      <button class="btn btn-primary" onclick="salvarFeatures()"><i class="fas fa-save"></i> Salvar Features</button>
+  const _sec = (title, subtitle, grid, bg = "#fff") =>
+    `<div style="background:${bg};border:1.5px solid #e8eaf6;border-radius:12px;padding:16px 18px">
+      <h4 style="margin:0 0 4px;color:#2c3e50;font-size:0.93rem;font-weight:700">${title}</h4>
+      ${subtitle ? `<p style="font-size:0.78rem;color:#999;margin:0 0 10px">${subtitle}</p>` : "<div style='height:10px'></div>"}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:7px">${grid}</div>
     </div>`;
 
-  // ── Painel autoritativo: aba Admin Master ──
-  if (master) master.innerHTML = html;
+  // 🔧 SÓCIO ADICIONADO AQUI TAMBÉM
+  const CARGOS_UI = [
+    { key: "dono", label: "🔑 Dono", cor: "#f59e0b" },
+    { key: "gerente", label: "👔 Gerente", cor: "#2980b9" },
+    { key: "socio", label: "🤝 Sócio", cor: "#8e44ad" },
+    { key: "funcionario", label: "👷 Empleado", cor: "#7f8c8d" },
+    { key: "garcom", label: "🍽️ Mozo", cor: "#27ae60" },
+  ];
 
-  // ── Configurações: vira atalho (não duplica checkboxes) ──
-  if (shortcut) {
-    shortcut.innerHTML = `
-      <div style="background:#fff5f5;border:1.5px dashed #fca5a5;border-radius:10px;padding:22px 20px;text-align:center">
-        <div style="font-size:1.8rem;margin-bottom:8px">🛡️</div>
-        <div style="font-weight:700;font-size:0.95rem;color:#991b1b;margin-bottom:8px">
-          Controle de Features
-        </div>
-        <div style="font-size:0.83rem;color:#7f1d1d;line-height:1.55;margin-bottom:16px">
-          O gerenciamento de features agora é feito em um lugar único —<br>
-          aba <b>Admin Master</b> — para evitar conflito de estado<br>
-          entre painéis duplicados.
-        </div>
-        <button onclick="showTab('adminmaster', { currentTarget: document.getElementById('menu-adminmaster') })"
-          class="btn btn-danger"
-          style="font-size:0.86rem;padding:10px 20px;background:#e74c3c;border-color:#e74c3c;font-weight:700">
-          <i class="fas fa-arrow-right"></i> Ir para Admin Master
+  const ABAS_UI = [
+    ["pedidos", "📋 Pedidos"],
+    ["cozinha", "👨‍🍳 Cozinha"],
+    ["pdv", "🖥️ PDV"],
+    ["financeiro", "💰 Financeiro"],
+    ["inventario", "📦 Inventário"],
+    ["produtos", "🍽️ Produtos"],
+    ["categorias", "🏷️ Categorias"],
+    ["motoboys", "🏍️ Motoboys"], // <-- ADICIONADOS
+    ["equipe", "👥 Equipe"],
+    ["configuracoes", "⚙️ Config"],
+    ["dashboard", "📊 Dashboard"],
+    ["estatisticas", "📈 Estatísticas"],
+    ["ficha-tecnica", "📝 Ficha Técnica"],
+    ["crm", "🤝 CRM"],
+    ["mensalistas", "🗓️ Mensalistas"],
+    ["turnos", "📺 Turnos"],
+    ["notas", "📋 Na Nota"],
+    ["facturacion", "🧮 Facturación"],
+    ["filiais", "🏬 Filiais"],
+  ];
+
+  const pCargos = f.permissoes_cargo || {};
+
+  const _chkPerm = (cargo, aba, label) => {
+    const perm = pCargos[cargo];
+    const isChecked = perm?.tabs ? perm.tabs.includes(aba) : true;
+    const cor = CARGOS_UI.find((c) => c.key === cargo)?.cor || "#888";
+    return `<label style="display:flex;align-items:center;gap:5px;padding:5px 7px;
+        border-radius:7px;cursor:pointer;font-size:0.78rem;
+        background:${isChecked ? cor + "18" : "#f5f5f5"};
+        border:1.5px solid ${isChecked ? cor : "#ddd"};transition:all .15s">
+      <input type="checkbox" data-perm-tab="${aba}" data-perm-cargo="${cargo}"
+        ${isChecked ? "checked" : ""}
+        onchange="this.closest('label').style.background=this.checked?'${cor}18':'#f5f5f5';
+                  this.closest('label').style.borderColor=this.checked?'${cor}':'#ddd'"
+        style="width:14px;height:14px;accent-color:${cor};flex-shrink:0">
+      ${label}
+    </label>`;
+  };
+
+  const permSection = CARGOS_UI.map(({ key, label, cor }) => {
+    const perm = pCargos[key] || {};
+    const podeCancel = perm.pode_cancelar_direto === true;
+    const abasChk = ABAS_UI.map(([k, l]) => _chkPerm(key, k, l)).join("");
+
+    return `<div style="border:2px solid ${cor}44;border-radius:12px;padding:14px 16px;background:#fff">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <span style="font-weight:700;font-size:0.92rem;color:${cor}">${label}</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;
+            font-size:0.8rem;font-weight:600;color:#c0392b;
+            background:${podeCancel ? "#fdecea" : "#f5f5f5"};
+            border:1.5px solid ${podeCancel ? "#e74c3c" : "#ddd"};
+            border-radius:8px;padding:5px 10px;transition:all .15s">
+          <input type="checkbox" data-perm-cancelar data-perm-cargo="${key}"
+            ${podeCancel ? "checked" : ""}
+            onchange="this.closest('label').style.background=this.checked?'#fdecea':'#f5f5f5';
+                      this.closest('label').style.borderColor=this.checked?'#e74c3c':'#ddd'"
+            style="width:14px;height:14px;accent-color:#e74c3c;flex-shrink:0">
+          ❌ Puede cancelar directamente
+        </label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${abasChk}</div>
+    </div>`;
+  }).join("");
+
+  const html = `
+    <div style="display:grid;gap:14px">
+      ${_sec("📂 Abas visíveis (global)", "Controla o menu para todos os cargos via regra global. As permissões por cargo abaixo têm prioridade.", chkTabs)}
+      ${_sec("💳 Formas de Pagamento", "App do cliente <strong>e</strong> PDV balcão + filtro financeiro", chkPags)}
+      ${_sec("🏷️ Tipos de Produto permitidos", "Quais tipos podem ser criados no cardápio", chkTipos)}
+      ${_sec("⚙️ Funcionalidades", "Oculta recursos específicos da interface", chkFuncs)}
+      
+      <div style="border:2px solid #e74c3c55;border-radius:14px;padding:16px 18px;background:#fffafa">
+        <h4 style="margin:0 0 4px;color:#c0392b;font-size:0.95rem;font-weight:800">
+          🔐 Permisos Granulares por Cargo
+        </h4>
+        <p style="font-size:0.78rem;color:#999;margin:0 0 14px">
+          Define qué pestañas puede ver cada cargo <strong>y</strong> si puede cancelar pedidos directamente.
+        </p>
+        <div style="display:grid;gap:12px">${permSection}</div>
+      </div>
+      
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="salvarFeatures()" style="flex:1;min-width:160px">
+          <i class="fas fa-save"></i> Guardar Configuración
         </button>
-      </div>`;
-  }
+        <button class="btn" onclick="renderPainelFeatures()"
+          style="background:#f0f4ff;color:#2c3e50;border:1.5px solid #c5cae9">
+          <i class="fas fa-sync"></i> Recarregar
+        </button>
+      </div>
+    </div>`;
+
+  target.innerHTML = html;
+}
+
+// Renderiza painel de features (adminMaster)
+async function renderPainelFeatures() {
+  // Garante que só renderiza no painel do Admin Master
+  const target = document.getElementById("painel-features-master");
+  if (!target) return;
+
+  await _carregarFeaturesGlobais();
+  const f = FEATURES_ATIVAS || {};
+  const tabs = f.tabs || {};
+  const tipos = f.tipos_produto || {};
+  const funcs = f.funcionalidades || {};
+
+  const _chk = (attr, key, val, label, bg = "#f9f9f9") =>
+    `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;
+        background:${bg};border-radius:8px;cursor:pointer;
+        border:1.5px solid ${val !== false ? "#27ae60" : "#ddd"};transition:border .2s">
+      <input type="checkbox" ${attr}="${key}" ${val !== false ? "checked" : ""}
+        onchange="this.closest('label').style.borderColor=this.checked?'#27ae60':'#ddd'"
+        style="width:17px;height:17px;accent-color:#27ae60;flex-shrink:0">
+      <span style="font-size:0.85rem">${label}</span></label>`;
+
+  const chkTabs = [
+    ["pedidos", "📋 Pedidos"],
+    ["cozinha", "👨‍🍳 Cozinha/KDS"],
+    ["pdv", "🖥️ PDV Balcão"],
+    ["financeiro", "💰 Financeiro"],
+    ["inventario", "📦 Inventário"],
+    ["produtos", "🍽️ Produtos"],
+    ["equipe", "👥 Equipe"],
+    ["configuracoes", "⚙️ Configurações"],
+    ["dashboard", "📊 Dashboard"],
+    ["estatisticas", "📈 Estatísticas"],
+    ["ficha-tecnica", "📝 Ficha Técnica"],
+    ["crm", "🤝 CRM Clientes"],
+    ["mensalistas", "🗓️ Mensalistas"],
+    ["turnos", "📺 Painel Turnos/TV"],
+    ["notas", "🧾 Notas/Facturas"],
+    ["facturacion", "🧮 Facturación"],
+    ["filiais", "🏬 Filiais"],
+  ]
+    .map(([k, l]) => _chk("data-feat-tab", k, tabs[k], l, "#f0f9ff"))
+    .join("");
+
+  const chkTipos = [
+    ["padrao", "📦 Simples"],
+    ["bebida", "🥤 Bebida"],
+    ["lanche", "🍔 Lanche"],
+    ["pizza", "🍕 Pizza"],
+    ["acai", "🍇 Açaí"],
+    ["shake", "🥤 Shake"],
+    ["suco", "🍊 Suco"],
+    ["sorvete", "🍦 Sorvete"],
+    ["montavel", "🥗 Montável"],
+    ["combo", "⭐ Combo"],
+    ["variacoes", "🎨 Multi-variação"],
+    ["kg", "⚖️ Venda por Kg"],
+    ["roupa", "👕 Roupa"],
+    ["eletronico", "🔌 Eletrônico"],
+    ["suplemento", "💪 Suplemento"],
+    ["pod", "☁️ Pod/Tabacaria"],
+    ["mercado", "🛒 Mercado"],
+  ]
+    .map(([k, l]) => _chk("data-feat-tipo", k, tipos[k], l, "#fdf9ff"))
+    .join("");
+
+  const pags = f.pagamentos || {};
+  const chkPags = [
+    ["Efetivo", "💵 Efectivo/Dinheiro"],
+    ["Cartao", "💳 Tarjeta (Débito + Crédito)"],
+    ["CartaoBR", "💳🇧🇷 Tarjeta BR (Débito + Crédito)"],
+    ["Pix", "🟢 Pix (BR)"],
+    ["Transferencia", "🏦 Alias/Transferência PY"],
+    ["QrMaquina", "📱 QR (Máquina + Celular + App)"],
+    ["Multipagamento", "🔀 Dividir Pagamento"],
+    ["Mensalista", "🎫 Mensalista"],
+    ["NaNota", "📋 Colocar na Nota"],
+  ]
+    .map(([k, l]) => _chk("data-feat-pag", k, pags[k], l, "#f0fff4"))
+    .join("");
+
+  const chkFuncs = [
+    ["delivery", "🛵 Delivery"],
+    ["retirada", "🏃 Retirada"],
+    ["local", "🍽️ Comer no Local"],
+    ["balcao", "🏪 Mostrador/PDV"],
+    ["cupons", "🎟️ Cupons"],
+    ["factura", "🧾 Factura PY"],
+    ["multipagamento", "🔀 Multipagamento"],
+    ["agendamento", "📅 Agendamento"],
+  ]
+    .map(([k, l]) => _chk("data-feat-func", k, funcs[k], l, "#fffbf0"))
+    .join("");
+
+  const _sec = (title, subtitle, grid, bg = "#fff") =>
+    `<div style="background:${bg};border:1.5px solid #e8eaf6;border-radius:12px;padding:16px 18px">
+      <h4 style="margin:0 0 4px;color:#2c3e50;font-size:0.93rem;font-weight:700">${title}</h4>
+      ${subtitle ? `<p style="font-size:0.78rem;color:#999;margin:0 0 10px">${subtitle}</p>` : "<div style='height:10px'></div>"}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:7px">${grid}</div>
+    </div>`;
+
+  // 🔧 AQUI ESTÃO TODOS OS CARGOS (INCLUINDO SÓCIO E GARÇOM)
+  const CARGOS_UI = [
+    { key: "dono", label: "🔑 Dono", cor: "#f59e0b" },
+    { key: "gerente", label: "👔 Gerente", cor: "#2980b9" },
+    { key: "socio", label: "🤝 Sócio", cor: "#8e44ad" },
+    { key: "funcionario", label: "👷 Empleado", cor: "#7f8c8d" },
+    { key: "garcom", label: "🍽️ Mozo", cor: "#27ae60" },
+  ];
+
+  const ABAS_UI = [
+    ["pedidos", "📋 Pedidos"],
+    ["cozinha", "👨‍🍳 Cozinha"],
+    ["pdv", "🖥️ PDV"],
+    ["financeiro", "💰 Financeiro"],
+    ["inventario", "📦 Inventário"],
+    ["produtos", "🍽️ Produtos"],
+    ["categorias", "🏷️ Categorias"],
+    ["motoboys", "🏍️ Motoboys"], // <-- ADICIONADOS
+    ["equipe", "👥 Equipe"],
+    ["configuracoes", "⚙️ Config"],
+    ["dashboard", "📊 Dashboard"],
+    ["estatisticas", "📈 Estatísticas"],
+    ["ficha-tecnica", "📝 Ficha Técnica"],
+    ["crm", "🤝 CRM"],
+    ["mensalistas", "🗓️ Mensalistas"],
+    ["turnos", "📺 Turnos"],
+    ["notas", "🧾 Notas"],
+    ["facturacion", "🧮 Facturación"],
+    ["filiais", "🏬 Filiais"],
+  ];
+
+  const pCargos = f.permissoes_cargo || {};
+
+  const _chkPerm = (cargo, aba, label) => {
+    const perm = pCargos[cargo];
+    const isChecked = perm?.tabs ? perm.tabs.includes(aba) : true;
+    const cor = CARGOS_UI.find((c) => c.key === cargo)?.cor || "#888";
+    return `<label style="display:flex;align-items:center;gap:5px;padding:5px 7px;
+        border-radius:7px;cursor:pointer;font-size:0.78rem;
+        background:${isChecked ? cor + "18" : "#f5f5f5"};
+        border:1.5px solid ${isChecked ? cor : "#ddd"};transition:all .15s">
+      <input type="checkbox" data-perm-tab="${aba}" data-perm-cargo="${cargo}"
+        ${isChecked ? "checked" : ""}
+        onchange="this.closest('label').style.background=this.checked?'${cor}18':'#f5f5f5';
+                  this.closest('label').style.borderColor=this.checked?'${cor}':'#ddd'"
+        style="width:14px;height:14px;accent-color:${cor};flex-shrink:0">
+      ${label}
+    </label>`;
+  };
+
+  // Gera a seção de cada cargo
+  const permSection = CARGOS_UI.map(({ key, label, cor }) => {
+    const perm = pCargos[key] || {};
+    const podeCancel = perm.pode_cancelar_direto === true;
+    const abasChk = ABAS_UI.map(([k, l]) => _chkPerm(key, k, l)).join("");
+
+    return `<div style="border:2px solid ${cor}44;border-radius:12px;padding:14px 16px;background:#fff">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <span style="font-weight:700;font-size:0.92rem;color:${cor}">${label}</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;
+            font-size:0.8rem;font-weight:600;color:#c0392b;
+            background:${podeCancel ? "#fdecea" : "#f5f5f5"};
+            border:1.5px solid ${podeCancel ? "#e74c3c" : "#ddd"};
+            border-radius:8px;padding:5px 10px;transition:all .15s">
+          <input type="checkbox" data-perm-cancelar data-perm-cargo="${key}"
+            ${podeCancel ? "checked" : ""}
+            onchange="this.closest('label').style.background=this.checked?'#fdecea':'#f5f5f5';
+                      this.closest('label').style.borderColor=this.checked?'#e74c3c':'#ddd'"
+            style="width:14px;height:14px;accent-color:#e74c3c;flex-shrink:0">
+          ❌ Puede cancelar directamente
+        </label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${abasChk}</div>
+    </div>`;
+  }).join("");
+
+  const html = `
+    <div style="display:grid;gap:14px">
+      ${_sec("📂 Abas visíveis (global)", "Controla o menu para todos os cargos via regra global.", chkTabs)}
+      ${_sec("💳 Formas de Pagamento", "App do cliente e PDV balcão", chkPags)}
+      ${_sec("🏷️ Tipos de Produto permitidos", "Quais tipos podem ser criados", chkTipos)}
+      ${_sec("⚙️ Funcionalidades", "Oculta recursos específicos", chkFuncs)}
+      
+      <div style="border:2px solid #e74c3c55;border-radius:14px;padding:16px 18px;background:#fffafa">
+        <h4 style="margin:0 0 4px;color:#c0392b;font-size:0.95rem;font-weight:800">
+          🔐 Permissões Granulares por Cargo
+        </h4>
+        <p style="font-size:0.78rem;color:#999;margin:0 0 14px">
+          Define qué pestañas puede ver cada cargo y si puede cancelar pedidos.
+        </p>
+        <div style="display:grid;gap:12px">${permSection}</div>
+      </div>
+      
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="salvarFeatures()" style="flex:1;min-width:160px">
+          <i class="fas fa-save"></i> Guardar Configuración
+        </button>
+        <button class="btn" onclick="renderPainelFeatures()"
+          style="background:#f0f4ff;color:#2c3e50;border:1.5px solid #c5cae9">
+          <i class="fas fa-sync"></i> Recarregar
+        </button>
+      </div>
+    </div>`;
+
+  target.innerHTML = html;
 }
 
 function iniciarRealtime() {
@@ -1033,12 +1415,9 @@ async function carregarPedidos(silencioso = false) {
       })
       .eq("id", p.id);
   }
-  // ───────────────────────────────────────────────────────────────────────────
 
-  // Badge de cancelamento pendente para o dono / adminMaster
-  const _podeCancel = ["dono", "adminMaster", "gerente"].includes(
-    perfilUsuario,
-  );
+  const _podeCancel = _podeCancelarDireto();
+
   const badgeCancelPendente = _podeCancel
     ? `<span style="background:#e74c3c;color:white;font-size:0.7rem;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;">CANC. PENDENTE</span>`
     : "";
@@ -1225,14 +1604,16 @@ async function carregarPedidos(silencioso = false) {
             : "";
 
         // ── Lista de itens do pedido para o card mobile ──────────────────
-        const _itensCardHtml = (p.itens || []).map((item) => {
-          const _q  = item.qtd || item.q || 1;
-          const _n  = item.nome || item.n || "?";
-          const _v  = item.variacao || item.t || "";
-          return `<div style="font-size:0.75rem;color:#444;line-height:1.4">
+        const _itensCardHtml = (p.itens || [])
+          .map((item) => {
+            const _q = item.qtd || item.q || 1;
+            const _n = item.nome || item.n || "?";
+            const _v = item.variacao || item.t || "";
+            return `<div style="font-size:0.75rem;color:#444;line-height:1.4">
             <span style="font-weight:700;color:#1a7a2e">${_q}×</span> ${_n}${_v && _v !== _n ? ` <span style="color:#e67e22">▸ ${_v}</span>` : ""}
           </div>`;
-        }).join("");
+          })
+          .join("");
 
         cardsDiv.innerHTML += `
                     <div style="background:${cardBg}; border-radius:10px; padding:14px 16px; box-shadow:0 2px 8px rgba(0,0,0,0.07); border-left:4px solid ${p.status === "pendente" ? "#f59e0b" : p.status === "pronto_entrega" ? "#22c55e" : p.status === "saiu_entrega" ? "#3498db" : "#94a3b8"};">
@@ -1349,7 +1730,10 @@ async function aprovarCancelamento(pedidoId) {
       .from("pedidos")
       .update({ estoque_descontado: !_resReporAprov.ok })
       .eq("id", pedidoId);
-    await _alertarFalhaEstoque(_resReporAprov, `Cancelamento aprovado — Pedido #${pedidoId}`);
+    await _alertarFalhaEstoque(
+      _resReporAprov,
+      `Cancelamento aprovado — Pedido #${pedidoId}`,
+    );
   }
   // Bug #6 corrigido: estorna cashback ao aprovar cancelamento
   await _estornarCashbackCancelamento(pedidoId);
@@ -1434,7 +1818,7 @@ async function mudarStatus(id, novoStatus) {
     return;
   }
 
-    if (novoStatus === "em_preparo") {
+  if (novoStatus === "em_preparo") {
     // ⚠️ GUARD anti-duplo-desconto:
     // Se o pedido JÁ teve estoque descontado (ex: veio do PDV balcão com
     // `estoque_descontado = true`, ou um operador já clicou em Preparar
@@ -1468,7 +1852,10 @@ async function mudarStatus(id, novoStatus) {
     // realmente confirmou sucesso em tudo. Se falhou parcialmente, mantém
     // true — o estoque ainda está "devendo" reposição, e isso fica visível
     // pra quem for reconciliar depois, em vez de sumir como se estivesse ok.
-    await supa.from("pedidos").update({ estoque_descontado: !_resRepor.ok }).eq("id", id);
+    await supa
+      .from("pedidos")
+      .update({ estoque_descontado: !_resRepor.ok })
+      .eq("id", id);
     await _alertarFalhaEstoque(_resRepor, `Pedido #${id} → Cancelamento`);
   }
 
@@ -2230,24 +2617,15 @@ async function calcularFinanceiro() {
   // ── 1. Carrega/verifica sessão ativa ─────────────────────────────
   await _carregarSessaoCaixa();
 
-  // // ── 2. Se não houver sessão aberta, exibe alerta de abertura ─────
-  // if (!_sessaoCaixaAtiva) {
-  //   _exibirAlertaAberturaCaixa();
-  //   return; // não renderiza nada enquanto não houver sessão
-  // }
-
   // ── 3. Define intervalo de tempo baseado na SESSÃO, não no calendário ─
   const hoje = new Date().toISOString().split("T")[0];
   const sessaoInicio = (elInicio.value || hoje) + "T00:00:00";
-  const sessaoFim    = (elFim.value   || hoje) + "T23:59:59";
+  const sessaoFim = (elFim.value || hoje) + "T23:59:59";
 
   // Gestores podem sobrepor o intervalo com o filtro de datas da tela.
-  // NOTA DE FUSO: o Supabase armazena UTC. Assunção é UTC-3 permanente desde 2024.
-  // Ao converter a data local do filtro, usamos _getAsuncionOffsetMs para obter UTC correto.
   let utcI = sessaoInicio;
   let utcF = sessaoFim;
   if (ehGestor && elInicio.value && elFim.value) {
-    // Determina o offset de Assunção dinamicamente via Intl
     const _refDate = new Date(elInicio.value + "T12:00:00");
     const _asunOffset = _getAsuncionOffsetMs(_refDate);
     utcI = new Date(
@@ -2266,45 +2644,60 @@ async function calcularFinanceiro() {
   const facturaFiltro = elFactura ? elFactura.value : "todos";
 
   // ── 4. Busca pedidos dentro da janela da sessão ───────────────────
-  // Inclui TODOS os status exceto cancelado — pedidos do app chegam como
-  // "pendente" ou "em_preparo" e devem ser contabilizados no caixa do dia.
   let query = supa
     .from("pedidos")
     .select("*, motoboys(nome)")
     .neq("status", "cancelado")
-    .gte("created_at", utcI)
-    .lte("created_at", utcF);
-
-  if (tipoFiltro !== "todos") query = query.eq("forma_pagamento", tipoFiltro);
-
-  // Funcionário: filtra apenas pedidos relacionados ao seu usuário
-  // (via mesa/operador, se seu schema tiver esse campo — ajuste o campo se necessário)
-  // if (!ehGestor) query = query.eq("operador_email", emailAtual);
+    .or(
+      `and(created_at.gte.${utcI},created_at.lte.${utcF}),and(quitado_em.gte.${utcI},quitado_em.lte.${utcF})`,
+    );
 
   const { data: pedidos } = await query;
   let peds = pedidos || [];
 
-  if (facturaFiltro === "com_factura")
+  // 🚨 O FILTRO MÁGICO DO NA NOTA 🚨
+  peds = peds.filter((p) => {
+    const isNaNota = (p.forma_pagamento || "").toLowerCase() === "nanota";
+    if (isNaNota) {
+      if (!p.quitado_em) return false;
+
+      const dtQuit = new Date(p.quitado_em).getTime();
+      const dtIni = new Date(utcI).getTime();
+      const dtFim = new Date(utcF).getTime();
+      if (dtQuit < dtIni || dtQuit > dtFim) return false;
+
+      p.forma_pagamento = p.forma_pagamento_quitacao || "Efetivo";
+    }
+
+    if (tipoFiltro !== "todos") {
+      const pgto = (p.forma_pagamento || "").toLowerCase();
+      if (!pgto.includes(tipoFiltro.toLowerCase())) return false;
+    }
+
+    return true;
+  });
+
+  if (facturaFiltro === "com_factura") {
     peds = peds.filter((p) => p.dados_factura?.ruc || p.dados_factura?.ci);
-  else if (facturaFiltro === "sem_factura")
+  } else if (facturaFiltro === "sem_factura") {
     peds = peds.filter((p) => !p.dados_factura?.ruc && !p.dados_factura?.ci);
+  }
 
   // ── 5. Movimentações de caixa da SESSÃO ──────────────────────────
-let caixa = [];
-if (_sessaoCaixaAtiva) {
-  let caixaQuery = supa
-    .from("movimentacoes_caixa")
-    .select("*")
-    .eq("sessao_id", _sessaoCaixaAtiva.id);
-  if (!ehGestor) caixaQuery = caixaQuery.eq("usuario_email", emailAtual);
-  const { data: caixaData } = await caixaQuery;
-  caixa = caixaData || [];
-}
+  let caixa = [];
+  if (_sessaoCaixaAtiva) {
+    let caixaQuery = supa
+      .from("movimentacoes_caixa")
+      .select("*")
+      .eq("sessao_id", _sessaoCaixaAtiva.id);
+    if (!ehGestor) caixaQuery = caixaQuery.eq("usuario_email", emailAtual);
+    const { data: caixaData } = await caixaQuery;
+    caixa = caixaData || [];
+  }
 
-  // Verifica bloqueio de caixa (sangria limite)
   _verificarBloqueioCaixa(emailAtual);
 
-  // ── 6. Cálculos (inalterado) ──────────────────────────────────────
+  // ── 6. Cálculos ─────────────────────────────────────────────────────
   const safeNum = (v) => {
     if (!v) return 0;
     if (typeof v === "number") return v;
@@ -2331,6 +2724,7 @@ if (_sessaoCaixaAtiva) {
     qtdPedidos = 0;
   const motoMap = {};
 
+  // CORRIGIDO: peds.forEach
   peds.forEach((p) => {
     const val = safeNum(p.total_geral);
     faturamento += val;
@@ -2341,33 +2735,39 @@ if (_sessaoCaixaAtiva) {
     // ── Multipagamento: distribui pelos métodos reais gravados em obs_pagamento ──
     if (pag === "multipagamento" && obsPag) {
       try {
-        const partes = JSON.parse(obsPag); // [{ metodo, valor }, ...] — campo legado: forma
+        const partes = JSON.parse(obsPag);
         if (Array.isArray(partes)) {
           partes.forEach((parte) => {
             const pf = (parte.metodo || parte.forma || "").toLowerCase();
             const pv = Math.round(Number(parte.valor) || 0);
-            if (pf.includes("pix"))                                   totalPix     += pv;
-            else if (pf.includes("transfer"))                         totalTransf  += pv;
-            else if (pf.includes("qrpy") || pf.includes("qr"))       totalQrPy    += pv;
-            else if (pf.includes("cartaobr") || pf.includes("br"))   totalCartaoBR+= pv;
-            else if (pf.includes("cartao") || pf.includes("cartão")) totalCartao  += pv;
-            else                                                       totalEfetivo += pv;
+            if (pf.includes("pix")) totalPix += pv;
+            else if (pf.includes("transfer")) totalTransf += pv;
+            else if (pf.includes("qrpy") || pf.includes("qr")) totalQrPy += pv;
+            else if (pf.includes("cartaobr") || pf.includes("br"))
+              totalCartaoBR += pv;
+            else if (pf.includes("cartao") || pf.includes("cartão"))
+              totalCartao += pv;
+            else totalEfetivo += pv;
           });
         } else {
-          totalMultiOutros += val; // JSON malformado — conta separado
+          totalMultiOutros += val;
         }
       } catch (_) {
-        totalMultiOutros += val; // obs_pagamento não é JSON (texto livre)
+        totalMultiOutros += val;
       }
     }
     // ── Pagamentos simples ──────────────────────────────────────────────────
-    else if (pag.includes("pix"))                                    totalPix     += val;
-    else if (pag.includes("transfer") || pag.includes("alias"))     totalTransf  += val;
-    else if (pag === "qrpy")                                         totalQrPy    += val;
-    else if (pag === "cartaobr")                                     totalCartaoBR+= val;
-    else if (pag.includes("cartao") || pag.includes("cartão"))      totalCartao  += val;
-    else if (pag.includes("efetivo") || pag.includes("dinheiro"))   totalEfetivo += val;
-    else                                                             totalMultiOutros += val;
+    else if (pag.includes("pix")) totalPix += val;
+    else if (pag.includes("transfer") || pag.includes("alias"))
+      totalTransf += val;
+    else if (pag === "qrpy") totalQrPy += val;
+    else if (pag === "cartaobr") totalCartaoBR += val;
+    else if (pag.includes("cartao") || pag.includes("cartão"))
+      totalCartao += val;
+    else if (pag.includes("efetivo") || pag.includes("dinheiro"))
+      totalEfetivo += val;
+    else totalMultiOutros += val;
+
     if (p.tipo_entrega === "delivery") {
       const taxa = safeNum(p.frete_motoboy) || TAXA_MOTOBOY || 0;
       custoEntregas += taxa;
@@ -2383,13 +2783,7 @@ if (_sessaoCaixaAtiva) {
   ).length;
   custoEntregas += (AJUDA_COMBUSTIVEL || 0) * qtdMotoboyUnicos;
 
-  // ── Lucro sobre Vendas (usando preco_compra cadastrado nos produtos) ──
-  // ATENÇÃO: este cálculo só considera itens cujo produto tem preco_compra
-  // cadastrado. Itens SEM preco_compra são excluídos do cálculo (não dá
-  // pra estimar lucro sem custo) — mas isso significa que o markup exibido
-  // é uma média APENAS dos produtos com custo cadastrado, não de 100% das
-  // vendas. Por isso agora rastreamos e exibimos a cobertura (% do
-  // faturamento que entrou no cálculo), para não dar falsa precisão.
+  // ── Lucro sobre Vendas ──
   let lucroBrutoVendas = 0;
   let markupMedioVendas = null;
   let faturamentoComCusto = 0;
@@ -2397,12 +2791,15 @@ if (_sessaoCaixaAtiva) {
   let qtdItensSemCusto = 0;
   try {
     const prodIdsSet = new Set();
+
+    // CORRIGIDO: peds.forEach
     peds.forEach((p) => {
       (p.itens || []).forEach((i) => {
         const pid = i.produto_id || i.id || i.pid;
         if (pid) prodIdsSet.add(Number(pid));
       });
     });
+
     const prodIds = Array.from(prodIdsSet);
     let precosCompra = {};
     if (prodIds.length > 0) {
@@ -2414,22 +2811,19 @@ if (_sessaoCaixaAtiva) {
         if (pr.preco_compra) precosCompra[pr.id] = pr.preco_compra;
       });
     }
+
     let custoTotal = 0;
-        peds.forEach((p) => {
+
+    // CORRIGIDO: peds.forEach
+    peds.forEach((p) => {
       (p.itens || []).forEach((i) => {
         const pid = Number(i.produto_id || i.id || i.pid || 0);
         const qtd = i.qtd || i.q || 1;
         const precoVenda = safeNum(i.preco || i.p || 0);
         const precoCompraKg = precosCompra[pid] || 0;
 
-        // 🔧 Item vendido por peso: `preco` já é o TOTAL cobrado
-        // (preco_kg × peso_gramas / 1000), mas `preco_compra` é por kg.
-        // Precisa converter o custo para a mesma fração de peso antes
-        // de subtrair — senão o lucro vira um prejuízo fictício.
         const _isItemKg = i._isKg === true || Number(i.peso_gramas) > 0;
-        const _fracaoKg = _isItemKg
-          ? Number(i.peso_gramas || 0) / 1000
-          : 1;
+        const _fracaoKg = _isItemKg ? Number(i.peso_gramas || 0) / 1000 : 1;
         const precoCompra = precoCompraKg * _fracaoKg;
 
         const valorItem = precoVenda * qtd;
@@ -2438,8 +2832,6 @@ if (_sessaoCaixaAtiva) {
           custoTotal += precoCompra * qtd;
           faturamentoComCusto += valorItem;
         } else if (precoVenda > 0) {
-          // Item vendido mas sem preco_compra cadastrado — fica de fora
-          // do cálculo de lucro. Contabiliza para mostrar a cobertura real.
           faturamentoSemCusto += valorItem;
           qtdItensSemCusto++;
         }
@@ -2451,7 +2843,6 @@ if (_sessaoCaixaAtiva) {
     console.warn("Erro calcular lucro vendas:", e);
   }
 
-  // % do faturamento de itens que efetivamente entrou no cálculo de lucro
   const _baseCobertura = faturamentoComCusto + faturamentoSemCusto;
   const coberturaLucroPct =
     _baseCobertura > 0
@@ -2502,19 +2893,18 @@ if (_sessaoCaixaAtiva) {
   setV("card-custo-moto", fmt(custoEntregas));
   setV("card-lucro", fmt(lucro));
   setV("card-lucro-vendas", fmt(lucroBrutoVendas || 0));
+
   const elLvPct = document.getElementById("card-lucro-vendas-pct");
   if (elLvPct) {
-    // Avisa quando o markup foi calculado sobre só uma fração das vendas
-    // (produtos sem preco_compra cadastrado ficam fora da conta) — isso
-    // evita comparar números de cobertura diferente entre lojas/sistemas
-    // e achar que o lucro "não bate" quando na verdade é a base de cálculo
-    // que é diferente.
     const avisoCobertura =
       coberturaLucroPct !== null && coberturaLucroPct < 95
         ? ` · cálculo cobre só ${coberturaLucroPct}% das vendas (${qtdItensSemCusto} item(s) sem custo cadastrado)`
         : "";
     if (lucroBrutoVendas > 0 && markupMedioVendas !== null) {
-      elLvPct.style.color = coberturaLucroPct !== null && coberturaLucroPct < 95 ? "#d97706" : "#388e3c";
+      elLvPct.style.color =
+        coberturaLucroPct !== null && coberturaLucroPct < 95
+          ? "#d97706"
+          : "#388e3c";
       elLvPct.textContent = `markup médio ${markupMedioVendas}%${avisoCobertura}`;
       elLvPct.title = avisoCobertura
         ? `Faturamento sem custo cadastrado: ${fmt(faturamentoSemCusto)}. Cadastre o "preço de compra" nesses produtos para um markup mais preciso.`
@@ -2526,6 +2916,7 @@ if (_sessaoCaixaAtiva) {
       elLvPct.textContent = "cadastre o preço de compra nos produtos";
     }
   }
+
   setV("total-pix", fmt(totalPix));
   setV("total-transf", fmt(totalTransf));
   setV("total-cartao", fmt(totalCartao));
@@ -2536,33 +2927,35 @@ if (_sessaoCaixaAtiva) {
   setV("card-qtd-pedidos", qtdPedidos);
   setV("card-ticket-medio", fmt(qtdPedidos > 0 ? faturamento / qtdPedidos : 0));
 
-  // Badge do operador / info da sessão
   const badgeCaixa = document.getElementById("badge-caixa-operador");
-if (badgeCaixa) {
-  if (_sessaoCaixaAtiva) {
-    const dAbr = new Date(_sessaoCaixaAtiva.aberto_em).toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const dFch = _sessaoCaixaAtiva.fechado_em
-      ? new Date(_sessaoCaixaAtiva.fechado_em).toLocaleString("pt-BR", {
+  if (badgeCaixa) {
+    if (_sessaoCaixaAtiva) {
+      const dAbr = new Date(_sessaoCaixaAtiva.aberto_em).toLocaleString(
+        "pt-BR",
+        {
           day: "2-digit",
           month: "2-digit",
           hour: "2-digit",
           minute: "2-digit",
-        })
-      : "em aberto";
-    badgeCaixa.textContent = ehGestor
-      ? `📊 Visão geral — sessão ${_sessaoCaixaAtiva.id} (${_sessaoCaixaAtiva.usuario_email}) · ${dAbr} → ${dFch}`
-      : `💼 Seu caixa — aberto ${dAbr} → ${dFch}`;
-  } else {
-    badgeCaixa.textContent = "📊 Sem sessão de caixa ativa — exibindo todos os pedidos do período";
+        },
+      );
+      const dFch = _sessaoCaixaAtiva.fechado_em
+        ? new Date(_sessaoCaixaAtiva.fechado_em).toLocaleString("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "em aberto";
+      badgeCaixa.textContent = ehGestor
+        ? `📊 Visão geral — sessão ${_sessaoCaixaAtiva.id} (${_sessaoCaixaAtiva.usuario_email}) · ${dAbr} → ${dFch}`
+        : `💼 Seu caixa — aberto ${dAbr} → ${dFch}`;
+    } else {
+      badgeCaixa.textContent =
+        "📊 Sem sessão de caixa ativa — exibindo todos os pedidos do período";
+    }
   }
-}
 
-  // Tabelas de despesas e motoboys (código original preservado)
   const tbD = document.getElementById("lista-despesas-caixa");
   if (tbD) {
     const despesas = (caixa || []).filter((c) => c.tipo === "despesa");
@@ -2639,11 +3032,10 @@ if (badgeCaixa) {
     }
   }
 
-  // ── Relatório Detalhado de Vendas: popula com os pedidos já carregados ──
-  // Não faz nova query ao banco — reutiliza `peds` (já filtrados por data e forma de pagamento).
+  // ── Relatório Detalhado de Vendas ──
   _finRelPopular(peds);
 
-  // ── Histórico de Boletins de Fechamento (card novo) ──
+  // ── Histórico de Boletins de Fechamento ──
   carregarHistoricoFechamentos();
 }
 
@@ -2655,11 +3047,11 @@ if (badgeCaixa) {
 
 /** Estado interno do relatório — isolado do restante do módulo */
 const _finRel = {
-  linhas: [],          // todas as linhas expandidas (1 por item × pedido)
+  linhas: [], // todas as linhas expandidas (1 por item × pedido)
   linhasFiltradas: [], // subconjunto após busca livre
   pagina: 0,
   PAGE_SIZE: 50,
-  aberto: false,       // painel colapsado por padrão
+  aberto: false, // painel colapsado por padrão
 };
 
 /**
@@ -2678,22 +3070,27 @@ function _finRelPopular(peds) {
   (peds || []).forEach((p) => {
     const itens = Array.isArray(p.itens) ? p.itens : [];
     const dataHora = new Date(p.created_at).toLocaleString("pt-BR", {
-      day: "2-digit", month: "2-digit",
-      hour: "2-digit", minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
     });
     const pedidoLabel = `#${p.id}`;
-    const cliente    = p.cliente_nome || "—";
+    const cliente = p.cliente_nome || "—";
 
     // Forma de pagamento — resolve multipagamento
     let pgtoLabel;
-    const pag    = (p.forma_pagamento || "").toLowerCase();
+    const pag = (p.forma_pagamento || "").toLowerCase();
     const obsPag = p.obs_pagamento || "";
     if (pag === "multipagamento" && obsPag) {
       try {
         const partes = JSON.parse(obsPag);
         if (Array.isArray(partes)) {
           pgtoLabel = partes
-            .map((pt) => { const m = pt.metodo || pt.forma || "—"; return `${_sepIconePgto(m)} ${m} (Gs ${Math.round(Number(pt.valor) || 0).toLocaleString("es-PY")})`; })
+            .map((pt) => {
+              const m = pt.metodo || pt.forma || "—";
+              return `${_sepIconePgto(m)} ${m} (Gs ${Math.round(Number(pt.valor) || 0).toLocaleString("es-PY")})`;
+            })
             .join(" + ");
         } else {
           pgtoLabel = p.forma_pagamento || "—";
@@ -2708,27 +3105,35 @@ function _finRelPopular(peds) {
     if (!itens.length) {
       // Pedido sem itens — inclui uma linha representando o total
       linhas.push({
-        pedidoLabel, dataHora, cliente,
-        nome: "(sem itens)", qtd: "—",
-        vlUnit: "—", subtotal: fmt(p.total_geral || 0),
-        pgtoLabel, pedidoId: p.id,
+        pedidoLabel,
+        dataHora,
+        cliente,
+        nome: "(sem itens)",
+        qtd: "—",
+        vlUnit: "—",
+        subtotal: fmt(p.total_geral || 0),
+        pgtoLabel,
+        pedidoId: p.id,
         _subtotalNum: p.total_geral || 0,
       });
       return;
     }
 
     itens.forEach((item) => {
-      const qtd     = item.qtd  || item.q  || 1;
-      const nome    = item.nome || item.n  || "Item";
-      const vlUnit  = item.preco || item.p  || 0;
+      const qtd = item.qtd || item.q || 1;
+      const nome = item.nome || item.n || "Item";
+      const vlUnit = item.preco || item.p || 0;
       const variacao = item.variacao ? ` (${item.variacao})` : "";
       linhas.push({
-        pedidoLabel, dataHora, cliente,
+        pedidoLabel,
+        dataHora,
+        cliente,
         nome: nome + variacao,
         qtd,
         vlUnit: fmt(vlUnit),
         subtotal: fmt(vlUnit * qtd),
-        pgtoLabel, pedidoId: p.id,
+        pgtoLabel,
+        pedidoId: p.id,
         _subtotalNum: vlUnit * qtd,
       });
     });
@@ -2753,14 +3158,16 @@ function _finRelPopular(peds) {
  * Chamada pelo oninput do campo de busca e por _finRelPopular.
  */
 function _finRelFiltrarTabela() {
-  const busca = (document.getElementById("fin-rel-busca")?.value || "").toLowerCase().trim();
+  const busca = (document.getElementById("fin-rel-busca")?.value || "")
+    .toLowerCase()
+    .trim();
 
   _finRel.linhasFiltradas = busca
     ? _finRel.linhas.filter(
         (l) =>
           l.nome.toLowerCase().includes(busca) ||
           l.cliente.toLowerCase().includes(busca) ||
-          l.pedidoLabel.toLowerCase().includes(busca)
+          l.pedidoLabel.toLowerCase().includes(busca),
       )
     : [..._finRel.linhas];
 
@@ -2772,23 +3179,23 @@ function _finRelFiltrarTabela() {
  * Renderiza a página atual da tabela e atualiza os totalizadores.
  */
 function _finRelRenderizar() {
-  const tbody   = document.getElementById("fin-rel-tbody");
-  const elInfo  = document.getElementById("fin-rel-pag-info");
+  const tbody = document.getElementById("fin-rel-tbody");
+  const elInfo = document.getElementById("fin-rel-pag-info");
   const btnPrev = document.getElementById("fin-rel-btn-prev");
   const btnNext = document.getElementById("fin-rel-btn-next");
   if (!tbody) return;
 
   const { linhasFiltradas, pagina, PAGE_SIZE } = _finRel;
-  const total  = linhasFiltradas.length;
+  const total = linhasFiltradas.length;
   const inicio = pagina * PAGE_SIZE;
-  const fim    = Math.min(inicio + PAGE_SIZE, total);
-  const slice  = linhasFiltradas.slice(inicio, fim);
+  const fim = Math.min(inicio + PAGE_SIZE, total);
+  const slice = linhasFiltradas.slice(inicio, fim);
 
   if (!total) {
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#bbb;padding:24px;font-size:0.85rem;">
       Nenhum item encontrado para os filtros aplicados.
     </td></tr>`;
-    if (elInfo)  elInfo.textContent = "";
+    if (elInfo) elInfo.textContent = "";
     if (btnPrev) btnPrev.disabled = true;
     if (btnNext) btnNext.disabled = true;
     _finRelAtualizarTotais([]);
@@ -2799,13 +3206,14 @@ function _finRelRenderizar() {
   let lastPedido = null;
   let zebraClass = "rel-row-a";
 
-  tbody.innerHTML = slice.map((l) => {
-    if (l.pedidoId !== lastPedido) {
-      lastPedido = l.pedidoId;
-      zebraClass = zebraClass === "rel-row-a" ? "rel-row-b" : "rel-row-a";
-    }
-    const bg = zebraClass === "rel-row-a" ? "#fff" : "#f9fafb";
-    return `
+  tbody.innerHTML = slice
+    .map((l) => {
+      if (l.pedidoId !== lastPedido) {
+        lastPedido = l.pedidoId;
+        zebraClass = zebraClass === "rel-row-a" ? "rel-row-b" : "rel-row-a";
+      }
+      const bg = zebraClass === "rel-row-a" ? "#fff" : "#f9fafb";
+      return `
       <tr style="background:${bg};">
         <td style="white-space:nowrap; font-size:0.78rem; color:#888;">${l.pedidoLabel}</td>
         <td style="white-space:nowrap; font-size:0.78rem; color:#888;">${l.dataHora}</td>
@@ -2816,11 +3224,13 @@ function _finRelRenderizar() {
         <td style="text-align:right; white-space:nowrap; font-size:0.85rem; font-weight:700; color:#2d6a4f;">${l.subtotal}</td>
         <td style="font-size:0.78rem; color:#555; white-space:nowrap;">${l.pgtoLabel}</td>
       </tr>`;
-  }).join("");
+    })
+    .join("");
 
   // Paginação
   const totalPags = Math.ceil(total / PAGE_SIZE);
-  if (elInfo)  elInfo.textContent = `Exibindo ${inicio + 1}–${fim} de ${total} linha${total !== 1 ? "s" : ""} (pág. ${pagina + 1}/${totalPags})`;
+  if (elInfo)
+    elInfo.textContent = `Exibindo ${inicio + 1}–${fim} de ${total} linha${total !== 1 ? "s" : ""} (pág. ${pagina + 1}/${totalPags})`;
   if (btnPrev) btnPrev.disabled = pagina === 0;
   if (btnNext) btnNext.disabled = fim >= total;
 
@@ -2832,19 +3242,25 @@ function _finRelRenderizar() {
 function _finRelAtualizarTotais(linhas) {
   const fmt = (n) => "Gs " + Math.round(n).toLocaleString("es-PY");
   const receita = linhas.reduce((s, l) => s + (l._subtotalNum || 0), 0);
-  const qtdItens = linhas.reduce((s, l) => s + (typeof l.qtd === "number" ? l.qtd : 0), 0);
-  const ticket   = qtdItens > 0 ? receita / qtdItens : 0;
+  const qtdItens = linhas.reduce(
+    (s, l) => s + (typeof l.qtd === "number" ? l.qtd : 0),
+    0,
+  );
+  const ticket = qtdItens > 0 ? receita / qtdItens : 0;
 
   const el = (id) => document.getElementById(id);
-  if (el("fin-rel-tot-itens"))   el("fin-rel-tot-itens").textContent   = qtdItens.toLocaleString("es-PY");
-  if (el("fin-rel-tot-receita")) el("fin-rel-tot-receita").textContent = fmt(receita);
-  if (el("fin-rel-tot-ticket"))  el("fin-rel-tot-ticket").textContent  = fmt(ticket);
+  if (el("fin-rel-tot-itens"))
+    el("fin-rel-tot-itens").textContent = qtdItens.toLocaleString("es-PY");
+  if (el("fin-rel-tot-receita"))
+    el("fin-rel-tot-receita").textContent = fmt(receita);
+  if (el("fin-rel-tot-ticket"))
+    el("fin-rel-tot-ticket").textContent = fmt(ticket);
 }
 
 /** Navega entre páginas: delta = -1 (anterior) ou +1 (próxima) */
 function _finRelPagina(delta) {
-  const total    = _finRel.linhasFiltradas.length;
-  const maxPag   = Math.max(0, Math.ceil(total / _finRel.PAGE_SIZE) - 1);
+  const total = _finRel.linhasFiltradas.length;
+  const maxPag = Math.max(0, Math.ceil(total / _finRel.PAGE_SIZE) - 1);
   _finRel.pagina = Math.min(maxPag, Math.max(0, _finRel.pagina + delta));
   _finRelRenderizar();
 }
@@ -2871,24 +3287,44 @@ function _finRelToggle(btn) {
 /** Exporta as linhas filtradas como CSV UTF-8 com BOM (abre corretamente no Excel) */
 function _finRelExportarCSV() {
   const linhas = _finRel.linhasFiltradas;
-  if (!linhas.length) { alert("Nenhum dado para exportar."); return; }
+  if (!linhas.length) {
+    alert("Nenhum dado para exportar.");
+    return;
+  }
 
   const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const header = ["Pedido", "Data/Hora", "Cliente", "Produto", "Qtd", "Vl. Unit. (Gs)", "Subtotal (Gs)", "Pagamento"];
+  const header = [
+    "Pedido",
+    "Data/Hora",
+    "Cliente",
+    "Produto",
+    "Qtd",
+    "Vl. Unit. (Gs)",
+    "Subtotal (Gs)",
+    "Pagamento",
+  ];
 
-  const rows = linhas.map((l) => [
-    l.pedidoLabel, l.dataHora, l.cliente, l.nome, l.qtd,
-    Math.round(parseFloat(String(l.vlUnit).replace(/[^\d.]/g, "")) || 0),
-    Math.round(l._subtotalNum || 0),
-    l.pgtoLabel,
-  ].map(escape).join(";"));
+  const rows = linhas.map((l) =>
+    [
+      l.pedidoLabel,
+      l.dataHora,
+      l.cliente,
+      l.nome,
+      l.qtd,
+      Math.round(parseFloat(String(l.vlUnit).replace(/[^\d.]/g, "")) || 0),
+      Math.round(l._subtotalNum || 0),
+      l.pgtoLabel,
+    ]
+      .map(escape)
+      .join(";"),
+  );
 
-  const csv  = "\uFEFF" + [header.map(escape).join(";"), ...rows].join("\r\n");
+  const csv = "\uFEFF" + [header.map(escape).join(";"), ...rows].join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
   const hoje = new Date().toISOString().split("T")[0];
-  a.href     = url;
+  a.href = url;
   a.download = `relatorio_vendas_${hoje}.csv`;
   a.click();
   URL.revokeObjectURL(url);
@@ -3251,7 +3687,7 @@ async function carregarRelatorio() {
         '<span style="background:#f7f0e8;color:#6e4a1a;border-radius:10px;padding:2px 7px;font-size:0.68rem;font-weight:700">🚶 Retirada</span>',
     };
     const tipoBadge = tipoBadges[p.tipo_entrega] || "";
-    const _podeCancelRel = ["dono", "adminMaster", "gerente", "funcionario"].includes(perfilUsuario);
+    const _podeCancelRel = _podeCancelarDireto();
     const jaCancelado = p.status === "cancelado";
 
     // Timeline — PDV tem etapas diferentes
@@ -3363,9 +3799,15 @@ async function carregarRelatorio() {
         ${totalTime !== "-" ? `<div style="margin-top:5px;padding:3px 7px;background:#f0f4ff;border-radius:6px;font-size:0.75rem;font-weight:700;color:#3a4db7;text-align:center">⏱ ${totalTime}</div>` : ""}
       </td>
       <td style="padding:10px 8px;white-space:nowrap;text-align:center;min-width:90px">
-        ${(!jaCancelado && _podeCancelRel) ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedidoRelatorio(${p.id})" title="Cancelar este pedido" style="font-size:0.7rem;padding:4px 8px">
+        ${
+          !jaCancelado && _podeCancelRel
+            ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedidoRelatorio(${p.id})" title="Cancelar este pedido" style="font-size:0.7rem;padding:4px 8px">
           <i class="fas fa-times"></i> Cancelar
-        </button>` : (jaCancelado ? '<span style="color:#aaa;font-size:0.7rem">Cancelado</span>' : '')}
+        </button>`
+            : jaCancelado
+              ? '<span style="color:#aaa;font-size:0.7rem">Cancelado</span>'
+              : ""
+        }
       </td>
     </tr>`;
   });
@@ -3377,11 +3819,15 @@ async function carregarRelatorio() {
 }
 
 async function cancelarPedidoRelatorio(pedidoId) {
-  if (!confirm("⚠️ Tem certeza que deseja CANCELAR este pedido?\n\nEsta ação não pode ser desfeita e irá repor o estoque (se já tiver sido baixado).")) {
+  if (
+    !confirm(
+      "⚠️ Tem certeza que deseja CANCELAR este pedido?\n\nEsta ação não pode ser desfeita e irá repor o estoque (se já tiver sido baixado).",
+    )
+  ) {
     return;
   }
   // Chama a função existente, que já faz todo o tratamento
-  await mudarStatus(pedidoId, 'cancelado');
+  await mudarStatus(pedidoId, "cancelado");
   // Recarrega o relatório para atualizar a lista
   carregarRelatorio();
 }
@@ -3520,44 +3966,59 @@ async function _calcularResumoSessao(sessaoId, inicioISO, fimISO) {
   };
 
   // ── 1. Busca em paralelo ────────────────────────────────────────
+  // AQUI FOI A PRIMEIRA CORREÇÃO: Adicionado 'obs_pagamento' no select
   const [
     { data: rows, error },
-    { data: pedidosBrutos },
-    { data: movs },
+    { data: pedidosBrutos, error: errPedidos },
+    { data: movs, error: errMovs },
   ] = await Promise.all([
     supa.from("vw_sessao_resumo").select("*").eq("sessao_id", sessaoId).limit(1),
-    supa
+     supa
       .from("pedidos")
       .select(
         "subtotal, total_geral, frete_cobrado_cliente, frete_motoboy, " +
         "desconto_cupom, desconto_pdv_valor, cashback_valor, " +
-        "forma_pagamento, tipo_entrega, motoboy_id, motoboys(nome)",
+        "forma_pagamento, forma_pagamento_quitacao, quitado_em, obs_pagamento, tipo_entrega, motoboy_id, motoboys(nome)"
       )
       .neq("status", "cancelado")
-      .gte("created_at", inicioISO)
-      .lte("created_at", fimISO),
+      .or(`and(created_at.gte.${inicioISO},created_at.lte.${fimISO}),and(quitado_em.gte.${inicioISO},quitado_em.lte.${fimISO})`),
     supa
       .from("movimentacoes_caixa")
       .select("tipo, valor, tipo_despesa, descricao_outro")
       .eq("sessao_id", sessaoId),
   ]);
 
+  if (errPedidos) {
+    console.error("[Fechamento] Erro ao buscar pedidos:", errPedidos.message);
+    alert(
+      "⚠️ Não foi possível buscar os pedidos desta sessão.\n\n" +
+      "Motivo: " + errPedidos.message + "\n\n" +
+      "O fechamento será exibido, mas os valores podem estar zerados."
+    );
+  }
+  if (errMovs) {
+    console.error("[Fechamento] Erro ao buscar movimentações:", errMovs.message);
+  }
+  if (error) {
+    console.warn("[Fechamento] View vw_sessao_resumo falhou:", error.message);
+  }
+
   const peds = pedidosBrutos || [];
+  const pedsFiltrados = (pedidosBrutos || []).filter((p) => {
+    const isNaNota = (p.forma_pagamento || "").toLowerCase() === "nanota";
+    if (isNaNota) {
+      if (!p.quitado_em) return false;
+      const dtQuit = new Date(p.quitado_em).getTime();
+      const dtIni = new Date(inicioISO).getTime();
+      const dtFim = new Date(fimISO).getTime();
+      if (dtQuit < dtIni || dtQuit > dtFim) return false;
+      
+      p.forma_pagamento = p.forma_pagamento_quitacao || "Efetivo";
+    }
+    return true;
+  });
   const movsArr = movs || [];
 
-  // ═══════════════════════════════════════════════════════════════
-  //  🔧 CORREÇÃO CRÍTICA #1 — Faturamento = total_geral (inclui frete)
-  //
-  //  Antes: faturamentoReal = subtotal − descontos (SEM frete)
-  //         → frete entrava na gaveta mas não era receita,
-  //           porém o pagamento ao motoboy era subtraído como despesa,
-  //           gerando diferença = soma dos fretes.
-  //
-  //  Agora:  faturamentoReal = total_geral (inclui frete).
-  //          O repasse ao motoboy é despesa real → desconta do lucro.
-  //          Resultado: cliente paga Gs X (produto) + Gs Y (frete);
-  //          loja paga Gs Y ao motoboy; lucro = X + Y − Y = X. ✓
-  // ═══════════════════════════════════════════════════════════════
   let faturamentoReal   = 0;
   let freteCobradoTotal = 0;
   let freteEmEspecie    = 0;
@@ -3565,7 +4026,7 @@ async function _calcularResumoSessao(sessaoId, inicioISO, fimISO) {
   let descontoTotal     = 0;
   const motoMap = {};
 
-  peds.forEach((p) => {
+  pedsFiltrados.forEach((p) => {
     const sub = safeNum(p.subtotal);
     const dc  = safeNum(p.desconto_cupom);
     const dp  = safeNum(p.desconto_pdv_valor);
@@ -3575,7 +4036,6 @@ async function _calcularResumoSessao(sessaoId, inicioISO, fimISO) {
     descontoTotal     += dc + dp + cb;
     freteCobradoTotal += freteVal;
 
-    // Faturamento = subtotal − descontos + frete cobrado
     faturamentoReal += Math.max(0, sub - dc - dp - cb) + freteVal;
 
     if (p.tipo_entrega === "delivery") {
@@ -3628,25 +4088,53 @@ async function _calcularResumoSessao(sessaoId, inicioISO, fimISO) {
   const totalSaidas   = totalDespesas + totalSangrias;
   const lucroOperacional = faturamentoReal + totalSuprimentos - totalSaidas;
 
-  // ── 5. Totais por forma de pagamento (incluindo frete) ─────────
+  // ── 5. Totais por forma de pagamento ─────────
   let totalEfetivo = 0, totalPix = 0, totalCartao = 0;
   let totalCartaoBR = 0, totalTransf = 0, totalQrPy = 0, totalMulti = 0;
 
-  peds.forEach((p) => {
+  pedsFiltrados.forEach((p) => {
     const base = Math.max(
       0,
       safeNum(p.subtotal) - safeNum(p.desconto_cupom) -
       safeNum(p.desconto_pdv_valor) - safeNum(p.cashback_valor),
     );
-    // 🔧 Inclui frete no valor que efetivamente passou por cada meio de pagamento
+    
+    // Inclui frete no valor que efetivamente passou por cada meio de pagamento
     const val = base + safeNum(p.frete_cobrado_cliente);
     const pag = (p.forma_pagamento || "").toLowerCase();
-    if (pag.includes("efetivo") || pag.includes("dinheiro")) totalEfetivo += val;
+    const obsPag = p.obs_pagamento || "";
+
+    // AQUI FOI A SEGUNDA CORREÇÃO: Adicionado o bloco do Multipagamento
+    if (pag === "multipagamento" && obsPag) {
+      try {
+        const partes = JSON.parse(obsPag);
+        if (Array.isArray(partes)) {
+          partes.forEach((parte) => {
+            const pf = (parte.metodo || parte.forma || "").toLowerCase();
+            const pv = Math.round(Number(parte.valor) || 0);
+            
+            if (pf.includes("efetivo") || pf.includes("dinheiro")) totalEfetivo += pv;
+            else if (pf.includes("pix")) totalPix += pv;
+            else if (pf === "cartaobr" || pf.includes("br")) totalCartaoBR += pv;
+            else if (pf.includes("cartao") || pf.includes("cartão")) totalCartao += pv;
+            else if (pf.includes("transfer") || pf.includes("alias")) totalTransf += pv;
+            else if (pf === "qrpy" || pf === "qr_py" || pf.includes("qr")) totalQrPy += pv;
+            else totalMulti += pv;
+          });
+        } else {
+          totalMulti += val;
+        }
+      } catch (_) {
+        totalMulti += val;
+      }
+    } 
+    // Pagamentos normais (não divididos)
+    else if (pag.includes("efetivo") || pag.includes("dinheiro")) totalEfetivo += val;
     else if (pag.includes("pix")) totalPix += val;
-    else if (pag === "cartaobr") totalCartaoBR += val;
+    else if (pag === "cartaobr" || pag.includes("br")) totalCartaoBR += val;
     else if (pag.includes("cartao") || pag.includes("cartão")) totalCartao += val;
     else if (pag.includes("transfer") || pag.includes("alias")) totalTransf += val;
-    else if (pag === "qrpy") totalQrPy += val;
+    else if (pag === "qrpy" || pag === "qr_py") totalQrPy += val;
     else totalMulti += val;
   });
 
@@ -3744,12 +4232,12 @@ async function _calcularResumoSessao(sessaoId, inicioISO, fimISO) {
 // ═══════════════════════════════════════════════════════════════════
 
 const _MOTOBOY_METODOS_PGTO = [
-  { value: "Efectivo",      label: "💵 Efectivo" },
-  { value: "Pix",           label: "🟢 Pix" },
+  { value: "Efectivo", label: "💵 Efectivo" },
+  { value: "Pix", label: "🟢 Pix" },
   { value: "Transferencia", label: "🏦 Transferencia" },
-  { value: "Cartao",        label: "💳 Tarjeta" },
-  { value: "QrPy",          label: "📱 QR Paraguay" },
-  { value: "Outro",         label: "✏️ Outro" },
+  { value: "Cartao", label: "💳 Tarjeta" },
+  { value: "QrPy", label: "📱 QR Paraguay" },
+  { value: "Outro", label: "✏️ Outro" },
 ];
 
 async function _abrirModalPagamentoMotoboys(sessaoId, inicioISO, fimISO) {
@@ -3764,7 +4252,9 @@ async function _abrirModalPagamentoMotoboys(sessaoId, inicioISO, fimISO) {
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    console.log("[Motoboy] Despesas já registradas nesta sessão — pulando modal.");
+    console.log(
+      "[Motoboy] Despesas já registradas nesta sessão — pulando modal.",
+    );
     return [];
   }
 
@@ -3798,7 +4288,7 @@ async function _abrirModalPagamentoMotoboys(sessaoId, inicioISO, fimISO) {
 
   // Calcula combustível por motoboy (rateio igualitário)
   const combustivelPorMotoboy =
-    motoboys.length > 0 ? (AJUDA_COMBUSTIVEL || 0) : 0;
+    motoboys.length > 0 ? AJUDA_COMBUSTIVEL || 0 : 0;
 
   motoboys.forEach((m) => {
     m.valorSugerido = m.freteTotal + combustivelPorMotoboy;
@@ -3817,10 +4307,12 @@ async function _abrirModalPagamentoMotoboys(sessaoId, inicioISO, fimISO) {
     const motoboysHtml = motoboys
       .map((m, idx) => {
         const nomeEsc = String(m.nome).replace(/</g, "&lt;");
-        const optsHtml = _MOTOBOY_METODOS_PGTO.map(
-          (o) =>
-            `<option value="${o.value}"${o.value === "Efectivo" ? " selected" : ""}>${o.label}</option>`,
-        ).join("");
+        const optsHtml = _MOTOBOY_METODOS_PGTO
+          .map(
+            (o) =>
+              `<option value="${o.value}"${o.value === "Efectivo" ? " selected" : ""}>${o.label}</option>`,
+          )
+          .join("");
         return `
           <div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;
                padding:12px 14px;margin-bottom:10px">
@@ -3923,9 +4415,9 @@ async function _abrirModalPagamentoMotoboys(sessaoId, inicioISO, fimISO) {
 
     // Expõe função para o onchange dos inputs
     window._motoboyRecalcularTotal = function () {
-      const inputs  = overlay.querySelectorAll('[data-role="valor"]');
+      const inputs = overlay.querySelectorAll('[data-role="valor"]');
       const selects = overlay.querySelectorAll('[data-role="metodo"]');
-      const checks  = overlay.querySelectorAll('[data-role="pagar"]');
+      const checks = overlay.querySelectorAll('[data-role="pagar"]');
       let total = 0;
       let efetivo = 0;
       inputs.forEach((inp, i) => {
@@ -3938,13 +4430,18 @@ async function _abrirModalPagamentoMotoboys(sessaoId, inicioISO, fimISO) {
       const totalEl = overlay.querySelector("#_pgto-motoboys-total");
       const efetivoEl = overlay.querySelector("#_pgto-motoboys-efetivo");
       if (totalEl) totalEl.textContent = "Gs " + total.toLocaleString("es-PY");
-      if (efetivoEl) efetivoEl.textContent = "Gs " + efetivo.toLocaleString("es-PY");
+      if (efetivoEl)
+        efetivoEl.textContent = "Gs " + efetivo.toLocaleString("es-PY");
     };
 
     window._motoboyTogglePagar = function (checkbox) {
       const idx = checkbox.dataset.idx;
-      const valorEl = overlay.querySelector(`input[data-role="valor"][data-idx="${idx}"]`);
-      const selEl = overlay.querySelector(`select[data-role="metodo"][data-idx="${idx}"]`);
+      const valorEl = overlay.querySelector(
+        `input[data-role="valor"][data-idx="${idx}"]`,
+      );
+      const selEl = overlay.querySelector(
+        `select[data-role="metodo"][data-idx="${idx}"]`,
+      );
       if (valorEl) {
         valorEl.disabled = !checkbox.checked;
         valorEl.style.opacity = checkbox.checked ? "1" : "0.4";
@@ -3960,32 +4457,36 @@ async function _abrirModalPagamentoMotoboys(sessaoId, inicioISO, fimISO) {
     window._motoboyRecalcularTotal();
 
     // Handlers dos botões
-    overlay.querySelector("#_pgto-motoboys-pular").addEventListener("click", () => {
-      overlay.remove();
-      resolve([]);
-    });
-
-    overlay.querySelector("#_pgto-motoboys-confirmar").addEventListener("click", () => {
-      const checks  = overlay.querySelectorAll('[data-role="pagar"]');
-      const inputs  = overlay.querySelectorAll('[data-role="valor"]');
-      const selects = overlay.querySelectorAll('[data-role="metodo"]');
-
-      const resultado = [];
-      inputs.forEach((inp, i) => {
-        if (!checks[i]?.checked) return;
-        const valor = parseFloat(inp.value) || 0;
-        if (valor <= 0) return;
-        resultado.push({
-          motoboy_id: motoboys[i].motoboy_id,
-          nome: motoboys[i].nome,
-          valor,
-          metodo: selects[i]?.value || "Efectivo",
-        });
+    overlay
+      .querySelector("#_pgto-motoboys-pular")
+      .addEventListener("click", () => {
+        overlay.remove();
+        resolve([]);
       });
 
-      overlay.remove();
-      resolve(resultado);
-    });
+    overlay
+      .querySelector("#_pgto-motoboys-confirmar")
+      .addEventListener("click", () => {
+        const checks = overlay.querySelectorAll('[data-role="pagar"]');
+        const inputs = overlay.querySelectorAll('[data-role="valor"]');
+        const selects = overlay.querySelectorAll('[data-role="metodo"]');
+
+        const resultado = [];
+        inputs.forEach((inp, i) => {
+          if (!checks[i]?.checked) return;
+          const valor = parseFloat(inp.value) || 0;
+          if (valor <= 0) return;
+          resultado.push({
+            motoboy_id: motoboys[i].motoboy_id,
+            nome: motoboys[i].nome,
+            valor,
+            metodo: selects[i]?.value || "Efectivo",
+          });
+        });
+
+        overlay.remove();
+        resolve(resultado);
+      });
   });
 }
 
@@ -4004,12 +4505,14 @@ async function fecharCaixaResumo() {
     return;
 
   // ── 1. Captura dados da sessão ANTES de qualquer operação ────────
-  const sessaoId      = _sessaoCaixaAtiva.id;
-  const abertoEm      = _sessaoCaixaAtiva.aberto_em;
+  const sessaoId = _sessaoCaixaAtiva.id;
+  const abertoEm = _sessaoCaixaAtiva.aberto_em;
   const valorAbertura = Number(_sessaoCaixaAtiva.valor_abertura || 0);
-  const emailAtual    = document.getElementById("user-email")?.innerText || "admin";
-  const nomeAtual     = document.getElementById("user-nome-display")?.innerText || emailAtual;
-  const fechadoEm     = new Date().toISOString();
+  const emailAtual =
+    document.getElementById("user-email")?.innerText || "admin";
+  const nomeAtual =
+    document.getElementById("user-nome-display")?.innerText || emailAtual;
+  const fechadoEm = new Date().toISOString();
 
   // ══════════════════════════════════════════════════════════════
   //  NOVO: modal de pagamento aos motoboys ANTES do cálculo.
@@ -4055,46 +4558,51 @@ async function fecharCaixaResumo() {
     // ── 4. Salva snapshot em caixa_fechamentos ────────────────────
     const detalhesJSON = {
       gerado_por: "admin.js:fecharCaixaResumo",
-      versao:     "1.1",
-      calculo:    "view_vw_sessao_resumo + ajuste_frete",
+      versao: "1.1",
+      calculo: "view_vw_sessao_resumo + ajuste_frete",
       motoboy_pagamentos: pagamentosMotoboys.map((p) => ({
-        nome: p.nome, valor: p.valor, metodo: p.metodo,
+        nome: p.nome,
+        valor: p.valor,
+        metodo: p.metodo,
       })),
     };
 
-    const { error: errSnap } = await supa
-      .from("caixa_fechamentos")
-      .insert([{
-        sessao_id:          sessaoId,
-        usuario_email:      emailAtual,
-        usuario_nome:       nomeAtual,
-        aberto_em:          abertoEm,
-        fechado_em:         fechadoEm,
-        valor_abertura:     valorAbertura,
-        faturamento:        r.faturamento,
-        qtd_pedidos:        r.qtd_pedidos,
-        custo_entregas:     r.custo_entregas,
-        total_despesas:     r.total_despesas,
-        total_sangrias:     r.total_sangrias,
-        total_suprimentos:  r.total_suprimentos,
-        lucro_operacional:  r.lucro_operacional,
-        dinheiro_gaveta:    r.dinheiro_gaveta,
-        total_efetivo:      r.total_efetivo,
-        total_pix:          r.total_pix,
-        total_cartao:       r.total_cartao,
-        total_cartao_br:    r.total_cartao_br,
-        total_transferencia:r.total_transferencia,
-        total_qr_py:        r.total_qr_py,
+    const { error: errSnap } = await supa.from("caixa_fechamentos").insert([
+      {
+        sessao_id: sessaoId,
+        usuario_email: emailAtual,
+        usuario_nome: nomeAtual,
+        aberto_em: abertoEm,
+        fechado_em: fechadoEm,
+        valor_abertura: valorAbertura,
+        faturamento: r.faturamento,
+        qtd_pedidos: r.qtd_pedidos,
+        custo_entregas: r.custo_entregas,
+        total_despesas: r.total_despesas,
+        total_sangrias: r.total_sangrias,
+        total_suprimentos: r.total_suprimentos,
+        lucro_operacional: r.lucro_operacional,
+        dinheiro_gaveta: r.dinheiro_gaveta,
+        total_efetivo: r.total_efetivo,
+        total_pix: r.total_pix,
+        total_cartao: r.total_cartao,
+        total_cartao_br: r.total_cartao_br,
+        total_transferencia: r.total_transferencia,
+        total_qr_py: r.total_qr_py,
         total_multi_outros: r.total_multi_outros,
-        detalhes:           detalhesJSON,
-      }]);
+        detalhes: detalhesJSON,
+      },
+    ]);
 
     if (errSnap) {
-      console.error("[fecharCaixaResumo] Erro ao salvar snapshot:", errSnap.message);
+      console.error(
+        "[fecharCaixaResumo] Erro ao salvar snapshot:",
+        errSnap.message,
+      );
       alert(
         "⚠️ Sessão será fechada, mas não foi possível salvar o snapshot do fechamento:\n\n" +
-        errSnap.message +
-        "\n\nVerifique se a migration SQL da tabela caixa_fechamentos foi executada."
+          errSnap.message +
+          "\n\nVerifique se a migration SQL da tabela caixa_fechamentos foi executada.",
       );
     }
 
@@ -4102,57 +4610,58 @@ async function fecharCaixaResumo() {
     const { error: errSess } = await supa
       .from("sessoes_caixa")
       .update({
-        fechado_em:       fechadoEm,
+        fechado_em: fechadoEm,
         valor_fechamento: r.lucro_operacional,
-        observacao:
-          `Fat: ${fmt(r.faturamento)} | Res: ${fmt(r.lucro_operacional)}`,
+        observacao: `Fat: ${fmt(r.faturamento)} | Res: ${fmt(r.lucro_operacional)}`,
       })
       .eq("id", sessaoId);
 
     if (errSess) {
-      console.error("[fecharCaixaResumo] Erro ao fechar sessão:", errSess.message);
+      console.error(
+        "[fecharCaixaResumo] Erro ao fechar sessão:",
+        errSess.message,
+      );
       alert("❌ Não foi possível fechar a sessão: " + errSess.message);
       return;
     }
 
     // ── 6. Registra movimentação de fechamento ────────────────────
-    await supa
-      .from("movimentacoes_caixa")
-      .insert([{
-        tipo:          "fechamento",
-        valor:         r.lucro_operacional,
-        descricao:
-          `Fechamento ${new Date().toLocaleDateString("pt-BR")} | Fat: ${fmt(r.faturamento)} | Res: ${fmt(r.lucro_operacional)}`,
+    await supa.from("movimentacoes_caixa").insert([
+      {
+        tipo: "fechamento",
+        valor: r.lucro_operacional,
+        descricao: `Fechamento ${new Date().toLocaleDateString("pt-BR")} | Fat: ${fmt(r.faturamento)} | Res: ${fmt(r.lucro_operacional)}`,
         usuario_email: emailAtual,
-        sessao_id:     sessaoId,
-      }]);
+        sessao_id: sessaoId,
+      },
+    ]);
 
     // ── 7. Modal de fechamento com botão de impressão explícito ───
     _mostrarModalFechamentoCaixa({
-      sessao_id:           sessaoId,
-      usuario_email:       emailAtual,
-      usuario_nome:        nomeAtual,
-      aberto_em:           abertoEm,
-      fechado_em:          fechadoEm,
-      valor_abertura:      valorAbertura,
-      faturamento:         r.faturamento,
-      frete_cobrado:       r.frete_cobrado,
-      frete_em_especie:    r.frete_em_especie,
-      qtd_pedidos:         r.qtd_pedidos,
-      custo_entregas:      r.custo_entregas,
-      total_despesas:      r.total_despesas,
-      total_sangrias:      r.total_sangrias,
-      total_suprimentos:   r.total_suprimentos,
-      lucro_operacional:   r.lucro_operacional,
-      dinheiro_gaveta:     r.dinheiro_gaveta,
-      total_efetivo:       r.total_efetivo,
-      total_pix:           r.total_pix,
-      total_cartao:        r.total_cartao,
-      total_cartao_br:     r.total_cartao_br,
+      sessao_id: sessaoId,
+      usuario_email: emailAtual,
+      usuario_nome: nomeAtual,
+      aberto_em: abertoEm,
+      fechado_em: fechadoEm,
+      valor_abertura: valorAbertura,
+      faturamento: r.faturamento,
+      frete_cobrado: r.frete_cobrado,
+      frete_em_especie: r.frete_em_especie,
+      qtd_pedidos: r.qtd_pedidos,
+      custo_entregas: r.custo_entregas,
+      total_despesas: r.total_despesas,
+      total_sangrias: r.total_sangrias,
+      total_suprimentos: r.total_suprimentos,
+      lucro_operacional: r.lucro_operacional,
+      dinheiro_gaveta: r.dinheiro_gaveta,
+      total_efetivo: r.total_efetivo,
+      total_pix: r.total_pix,
+      total_cartao: r.total_cartao,
+      total_cartao_br: r.total_cartao_br,
       total_transferencia: r.total_transferencia,
-      total_qr_py:         r.total_qr_py,
-      total_multi_outros:  r.total_multi_outros,
-      motoboy_pagamentos:  pagamentosMotoboys,
+      total_qr_py: r.total_qr_py,
+      total_multi_outros: r.total_multi_outros,
+      motoboy_pagamentos: pagamentosMotoboys,
     });
 
     // ── 8. Limpa estado local e atualiza UI ───────────────────────
@@ -4200,14 +4709,12 @@ async function fecharCaixaResumo() {
     // Atualiza indicadores globais
     const elStatusGlobal = document.getElementById("status-sessao-caixa");
     if (elStatusGlobal) {
-      elStatusGlobal.innerHTML =
-        `<span style="color:#e74c3c">🔴 Nenhum caixa aberto</span>`;
+      elStatusGlobal.innerHTML = `<span style="color:#e74c3c">🔴 Nenhum caixa aberto</span>`;
     }
     _pdvAtualizarPainelCaixa();
 
     // Recarrega o financeiro
     await calcularFinanceiro();
-
   } catch (e) {
     console.error("[fecharCaixaResumo] Erro inesperado:", e);
     alert("❌ Erro inesperado ao fechar caixa: " + e.message);
@@ -4228,21 +4735,25 @@ async function fecharCaixaResumo() {
 async function _inserirPagamentosMotoboys(pagamentos, sessaoId) {
   if (!pagamentos?.length) return;
 
-  const emailAtual = document.getElementById("user-email")?.innerText || "sistema";
+  const emailAtual =
+    document.getElementById("user-email")?.innerText || "sistema";
   const rows = pagamentos.map((p) => ({
-    tipo:             "despesa",
-    valor:            p.valor,
-    descricao:        `Pagamento Motoboy — ${p.nome}`,
-    usuario_email:    emailAtual,
-    tipo_despesa:     "motoboy",
-    descricao_outro:  p.metodo, // guarda a forma de pagamento
-    sessao_id:        sessaoId,
+    tipo: "despesa",
+    valor: p.valor,
+    descricao: `Pagamento Motoboy — ${p.nome}`,
+    usuario_email: emailAtual,
+    tipo_despesa: "motoboy",
+    descricao_outro: p.metodo, // guarda a forma de pagamento
+    sessao_id: sessaoId,
   }));
 
   const { error } = await supa.from("movimentacoes_caixa").insert(rows);
   if (error) {
     console.error("[Motoboy] Erro ao inserir despesas:", error);
-    alert("⚠️ Não foi possível registrar os pagamentos aos motoboys:\n" + error.message);
+    alert(
+      "⚠️ Não foi possível registrar os pagamentos aos motoboys:\n" +
+        error.message,
+    );
     return;
   }
   console.log(`✅ ${pagamentos.length} pagamento(s) de motoboy registrado(s).`);
@@ -4267,8 +4778,10 @@ function _mostrarModalFechamentoCaixa(f) {
     if (!iso) return "—";
     return new Date(iso).toLocaleString("pt-BR", {
       timeZone: "America/Asuncion",
-      day: "2-digit", month: "2-digit",
-      hour: "2-digit", minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
   const linha = (label, valor, cor) =>
@@ -4278,20 +4791,29 @@ function _mostrarModalFechamentoCaixa(f) {
      </div>`;
 
   // ── Bloco de pagamentos aos motoboys (se registrados) ─────────
-  const pagamentos = Array.isArray(f.motoboy_pagamentos) ? f.motoboy_pagamentos : [];
+  const pagamentos = Array.isArray(f.motoboy_pagamentos)
+    ? f.motoboy_pagamentos
+    : [];
   let motoboyBloco = "";
   if (pagamentos.length > 0) {
-    const itens = pagamentos.map((p) => {
-      const iconPgto = {
-        Efectivo: "💵", Pix: "🟢", Transferencia: "🏦",
-        Cartao: "💳", QrPy: "📱", Outro: "✏️",
-      }[p.metodo] || "💰";
-      const nomeEsc = String(p.nome).replace(/</g, "&lt;");
-      return `<div style="display:flex;justify-content:space-between;font-size:0.82rem;color:#475569;padding:3px 0">
+    const itens = pagamentos
+      .map((p) => {
+        const iconPgto =
+          {
+            Efectivo: "💵",
+            Pix: "🟢",
+            Transferencia: "🏦",
+            Cartao: "💳",
+            QrPy: "📱",
+            Outro: "✏️",
+          }[p.metodo] || "💰";
+        const nomeEsc = String(p.nome).replace(/</g, "&lt;");
+        return `<div style="display:flex;justify-content:space-between;font-size:0.82rem;color:#475569;padding:3px 0">
         <span>${iconPgto} ${nomeEsc} <span style="color:#94a3b8;font-size:0.75rem">(${p.metodo})</span></span>
         <span style="font-weight:700;color:#1e40af">${fmt(p.valor)}</span>
       </div>`;
-    }).join("");
+      })
+      .join("");
 
     const totalPag = pagamentos.reduce((a, p) => a + (Number(p.valor) || 0), 0);
     const totalEfet = pagamentos
@@ -4310,13 +4832,15 @@ function _mostrarModalFechamentoCaixa(f) {
           <span>Total pago</span>
           <span>${fmt(totalPag)}</span>
         </div>
-        ${totalEfet > 0
-          ? `<div style="display:flex;justify-content:space-between;font-size:0.78rem;
+        ${
+          totalEfet > 0
+            ? `<div style="display:flex;justify-content:space-between;font-size:0.78rem;
                color:#dc2626;margin-top:4px">
                <span>💵 Saído da gaveta (efectivo)</span>
                <span style="font-weight:700">${fmt(totalEfet)}</span>
              </div>`
-          : ""}
+            : ""
+        }
       </div>`;
   }
 
@@ -4353,12 +4877,14 @@ function _mostrarModalFechamentoCaixa(f) {
             <span style="color:#555">📦 Pedidos</span>
             <strong>${f.qtd_pedidos}</strong>
           </div>
-          ${(f.frete_cobrado || 0) > 0
-            ? `<div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;color:#94a3b8">
+          ${
+            (f.frete_cobrado || 0) > 0
+              ? `<div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;color:#94a3b8">
                  <span>🛵 Frete cobrado (repasse motoboy)</span>
                  <span style="font-weight:600">${fmt(f.frete_cobrado)}</span>
                </div>`
-            : ""}
+              : ""
+          }
         </div>
 
         <div style="margin-bottom:16px">
@@ -4414,7 +4940,8 @@ function _mostrarModalFechamentoCaixa(f) {
   `;
 
   document.body.appendChild(overlay);
-  overlay.querySelector("#_btn-fechar-modal-fech").onclick = () => overlay.remove();
+  overlay.querySelector("#_btn-fechar-modal-fech").onclick = () =>
+    overlay.remove();
   overlay.querySelector("#_btn-imprimir-fech").onclick = () => {
     overlay.remove();
     _abrirJanelaImpressaoFechamento(f);
@@ -4426,11 +4953,12 @@ function _mostrarModalFechamentoCaixa(f) {
 // ══════════════════════════════════════════════════════════════
 
 async function carregarHistoricoFechamentos() {
-  const tbody    = document.getElementById("hist-fech-tbody");
+  const tbody = document.getElementById("hist-fech-tbody");
   const contador = document.getElementById("hist-fech-contador");
   if (!tbody) return;
 
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#aaa;padding:20px"><i class="fas fa-spinner fa-spin"></i> Carregando...</td></tr>';
+  tbody.innerHTML =
+    '<tr><td colspan="7" style="text-align:center;color:#aaa;padding:20px"><i class="fas fa-spinner fa-spin"></i> Carregando...</td></tr>';
 
   const { data, error } = await supa
     .from("caixa_fechamentos")
@@ -4454,7 +4982,8 @@ async function carregarHistoricoFechamentos() {
   }
 
   if (!data || !data.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#bbb;padding:24px;font-size:0.85rem">Nenhum fechamento registrado ainda.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="7" style="text-align:center;color:#bbb;padding:24px;font-size:0.85rem">Nenhum fechamento registrado ainda.</td></tr>';
     return;
   }
 
@@ -4463,12 +4992,16 @@ async function carregarHistoricoFechamentos() {
     if (!iso) return "—";
     return new Date(iso).toLocaleString("pt-BR", {
       timeZone: "America/Asuncion",
-      day: "2-digit", month: "2-digit",
-      hour: "2-digit", minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
-  tbody.innerHTML = data.map((f) => `
+  tbody.innerHTML = data
+    .map(
+      (f) => `
     <tr>
       <td style="font-weight:700;color:#1a1a2e">#${f.sessao_id}</td>
       <td style="font-size:0.78rem;color:#666;white-space:nowrap">
@@ -4491,7 +5024,9 @@ async function carregarHistoricoFechamentos() {
         </button>
       </td>
     </tr>
-  `).join("");
+  `,
+    )
+    .join("");
 }
 
 async function imprimirFechamento(id) {
@@ -4518,22 +5053,34 @@ function _abrirJanelaImpressaoFechamento(f) {
   win.document.write(_gerarHtmlFechamentoTermico(f));
   win.document.close();
   setTimeout(() => {
-    try { win.focus(); win.print(); } catch (_) {}
+    try {
+      win.focus();
+      win.print();
+    } catch (_) {}
   }, 700);
 }
 
 function _gerarHtmlFechamentoTermico(f) {
-  const fmtGs = (n) => "Gs " + Math.round(Number(n) || 0).toLocaleString("es-PY");
+  const fmtGs = (n) =>
+    "Gs " + Math.round(Number(n) || 0).toLocaleString("es-PY");
   const fmtDt = (iso) => {
     if (!iso) return "—";
     return new Date(iso).toLocaleString("pt-BR", {
       timeZone: "America/Asuncion",
-      day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
-  const nomeLoja = (typeof NOME_RESTAURANTE !== "undefined" && NOME_RESTAURANTE) ? NOME_RESTAURANTE : "LOJA";
-  const impressoEm = new Date().toLocaleString("pt-BR", { timeZone: "America/Asuncion" });
+  const nomeLoja =
+    typeof NOME_RESTAURANTE !== "undefined" && NOME_RESTAURANTE
+      ? NOME_RESTAURANTE
+      : "LOJA";
+  const impressoEm = new Date().toLocaleString("pt-BR", {
+    timeZone: "America/Asuncion",
+  });
 
   const linha = (label, valor, bold) =>
     `<div class="linha"${bold ? ' style="font-weight:700"' : ""}><span>${label}</span><span>${valor}</span></div>`;
@@ -4766,8 +5313,13 @@ async function exportarPDF() {
   const total = pedidos.reduce((a, p) => a + (p.total_geral || 0), 0);
 
   // Reutiliza a mesma lógica de classificação do calcularFinanceiro
-  let totalPix = 0, totalEfet = 0, totalCard = 0, totalTransf = 0,
-      totalQrPy = 0, totalCartaoBR = 0, totalMulti = 0;
+  let totalPix = 0,
+    totalEfet = 0,
+    totalCard = 0,
+    totalTransf = 0,
+    totalQrPy = 0,
+    totalCartaoBR = 0,
+    totalMulti = 0;
   pedidos.forEach((p) => {
     const pag = (p.forma_pagamento || "").toLowerCase();
     const obsPag = p.obs_pagamento || "";
@@ -4779,22 +5331,30 @@ async function exportarPDF() {
           partes.forEach((parte) => {
             const pf = (parte.metodo || parte.forma || "").toLowerCase();
             const pv = Number(parte.valor) || 0;
-            if (pf.includes("pix"))                                   totalPix     += pv;
-            else if (pf.includes("transfer"))                         totalTransf  += pv;
-            else if (pf.includes("qrpy") || pf.includes("qr"))       totalQrPy    += pv;
-            else if (pf.includes("cartaobr") || pf.includes("br"))   totalCartaoBR+= pv;
-            else if (pf.includes("cartao") || pf.includes("cartão")) totalCard    += pv;
-            else                                                       totalEfet   += pv;
+            if (pf.includes("pix")) totalPix += pv;
+            else if (pf.includes("transfer")) totalTransf += pv;
+            else if (pf.includes("qrpy") || pf.includes("qr")) totalQrPy += pv;
+            else if (pf.includes("cartaobr") || pf.includes("br"))
+              totalCartaoBR += pv;
+            else if (pf.includes("cartao") || pf.includes("cartão"))
+              totalCard += pv;
+            else totalEfet += pv;
           });
-        } else { totalMulti += val; }
-      } catch (_) { totalMulti += val; }
-    } else if (pag.includes("pix"))                                   totalPix     += val;
-    else if (pag.includes("transfer") || pag.includes("alias"))      totalTransf  += val;
-    else if (pag === "qrpy")                                          totalQrPy    += val;
-    else if (pag === "cartaobr")                                      totalCartaoBR+= val;
-    else if (pag.includes("cart"))                                    totalCard    += val;
-    else if (pag.includes("efetivo") || pag.includes("dinheiro"))    totalEfet    += val;
-    else                                                              totalMulti   += val;
+        } else {
+          totalMulti += val;
+        }
+      } catch (_) {
+        totalMulti += val;
+      }
+    } else if (pag.includes("pix")) totalPix += val;
+    else if (pag.includes("transfer") || pag.includes("alias"))
+      totalTransf += val;
+    else if (pag === "qrpy") totalQrPy += val;
+    else if (pag === "cartaobr") totalCartaoBR += val;
+    else if (pag.includes("cart")) totalCard += val;
+    else if (pag.includes("efetivo") || pag.includes("dinheiro"))
+      totalEfet += val;
+    else totalMulti += val;
   });
 
   const rows = pedidos
@@ -5047,6 +5607,7 @@ function enviarRotaZap() {
 // Cache dos produtos para filtro local
 let _todosProdutos = [];
 let _produtosMap = {}; // mapa id→produto para onclick seguro sem JSON inline
+let _ptSelecionados = new Set();
 
 // ══════════════════════════════════════════════════════════════
 //  CÓDIGO DE BARRAS — Scanner (câmera) + Busca PDV
@@ -5433,79 +5994,75 @@ function ptToggleApenasEstoque(btn) {
   ptAplicarFiltros();
 }
 
+let _ptFiltroTimer = null;
 function filtrarProdutos(termo) {
-  if (!termo.trim()) {
-    renderizarCardsProdutos(_todosProdutos);
-    return;
-  }
-  const t = termo.toLowerCase();
-  const filtrados = _todosProdutos.filter(
-    (p) =>
-      p.nome.toLowerCase().includes(t) ||
-      (p.categoria_slug || "").toLowerCase().includes(t),
-  );
-  renderizarCardsProdutos(filtrados);
+  clearTimeout(_ptFiltroTimer);
+  
+  _ptFiltroTimer = setTimeout(() => {
+    if (!termo.trim()) {
+      renderizarCardsProdutos(_todosProdutos);
+      return;
+    }
+    const t = termo.toLowerCase();
+    const filtrados = _todosProdutos.filter(
+      (p) =>
+        p.nome.toLowerCase().includes(t) ||
+        (p.categoria_slug || "").toLowerCase().includes(t) ||
+        (p.codigo_barras && p.codigo_barras.toLowerCase().includes(t)),
+    );
+    renderizarCardsProdutos(filtrados);
+  }, 300); // Espera 300ms após a última tecla
 }
 
 function renderizarCardsProdutos(lista) {
   const grid = document.getElementById("lista-produtos-grid");
   if (!grid) return;
 
-  // ── Manage table header visibility ─────────────────────────
   const header = document.getElementById("produtos-table-header");
 
-  // ── Barra de ações em massa ─────────────────────────────────
   let barraAcoes = document.getElementById("pt-bulk-actions-bar");
   if (!barraAcoes) {
     barraAcoes = document.createElement("div");
     barraAcoes.id = "pt-bulk-actions-bar";
-    barraAcoes.style.cssText = `
-      display:none; align-items:center; gap:10px; flex-wrap:wrap;
-      background:#fff; border:1px solid #e2e8f0; border-radius:10px;
-      padding:8px 14px; margin-bottom:8px;
-      box-shadow:0 1px 4px rgba(0,0,0,0.06);
-    `;
-            barraAcoes.innerHTML = `
+    barraAcoes.style.cssText =
+      "display:none; align-items:center; gap:10px; flex-wrap:wrap; " +
+      "background:#fff; border:1px solid #e2e8f0; border-radius:10px; " +
+      "padding:8px 14px; margin-bottom:8px; " +
+      "box-shadow:0 1px 4px rgba(0,0,0,0.06);";
+
+    barraAcoes.innerHTML = `
       <span id="pt-bulk-count" style="font-size:0.82rem;font-weight:700;color:#334155"></span>
-      <button onclick="ptBulkPausar()" style="
-        padding:6px 14px;background:#f97316;color:#fff;border:none;border-radius:7px;
-        font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
+      
+      <button onclick="abrirModalBulkUpdate()" style="padding:6px 14px;background:#8b5cf6;color:#fff;border:none;border-radius:7px;font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
+        <i class="fas fa-edit"></i> Atualização em Lote
+      </button>
+
+      <button onclick="ptBulkPausar()" style="padding:6px 14px;background:#f97316;color:#fff;border:none;border-radius:7px;font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
         <i class="fas fa-pause"></i> Pausar
       </button>
-      <button onclick="ptBulkDespausar()" style="
-        padding:6px 14px;background:#22c55e;color:#fff;border:none;border-radius:7px;
-        font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
+      <button onclick="ptBulkDespausar()" style="padding:6px 14px;background:#22c55e;color:#fff;border:none;border-radius:7px;font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
         <i class="fas fa-play"></i> Despausar
       </button>
       <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;font-weight:600">
         <i class="fas fa-ruler-horizontal" style="color:#94a3b8"></i>
-        <select id="pt-bulk-label-width"
-          onchange="_setLabelSize(this.value)"
-          style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:7px;font-size:0.78rem;background:#fff;color:#334155;cursor:pointer;font-weight:600">
+        <select id="pt-bulk-label-width" onchange="_setLabelSize(this.value)" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:7px;font-size:0.78rem;background:#fff;color:#334155;cursor:pointer;font-weight:600">
           <option value="48">48 mm</option>
           <option value="58">58 mm</option>
           <option value="72">72 mm</option>
           <option value="80">80 mm</option>
         </select>
       </label>
-      <button onclick="imprimirEtiquetasEmMassa()" style="
-        padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:7px;
-        font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
+      <button onclick="imprimirEtiquetasEmMassa()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
         <i class="fas fa-print"></i> Imprimir Etiquetas
       </button>
-      <button onclick="ptBulkExcluir()" style="
-        padding:6px 14px;background:#ef4444;color:#fff;border:none;border-radius:7px;
-        font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
+      <button onclick="ptBulkExcluir()" style="padding:6px 14px;background:#ef4444;color:#fff;border:none;border-radius:7px;font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
         <i class="fas fa-trash"></i> Excluir
       </button>
-      <button onclick="ptBulkDesmarcarTodos()" style="
-        padding:6px 10px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:7px;
-        font-size:0.8rem;cursor:pointer">
+      <button onclick="ptBulkDesmarcarTodos()" style="padding:6px 10px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:7px;font-size:0.8rem;cursor:pointer">
         ✕ Desmarcar todos
       </button>
     `;
 
-    // Restaura a última largura escolhida pelo usuário
     const _selWidth = document.getElementById("pt-bulk-label-width");
     if (_selWidth) {
       _selWidth.value = String(
@@ -5529,17 +6086,9 @@ function renderizarCardsProdutos(lista) {
   }
 
   const _TIPO_ICONS = {
-    padrao: "📦",
-    bebida: "🥤",
-    lanche: "🍔",
-    pizza: "🍕",
-    acai: "🍇",
-    shake: "🥤",
-    suco: "🍊",
-    sorvete: "🍦",
-    montavel: "🥗",
-    almoco: "🍽️",
-    combo: "⭐",
+    padrao: "📦", bebida: "🥤", lanche: "🍔", pizza: "🍕",
+    acai: "🍇", shake: "🥤", suco: "🍊", sorvete: "🍦",
+    montavel: "🥗", almoco: "🍽️", combo: "⭐",
   };
 
   lista.forEach((p) => {
@@ -5551,69 +6100,47 @@ function renderizarCardsProdutos(lista) {
 
     const tipoIcon = _TIPO_ICONS[tipoKey] || "📦";
 
-    // ── Image ────────────────────────────────────────────────
     const imgHtml = p.imagem_url
       ? `<img src="${p.imagem_url}" alt="${p.nome}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">`
       : `<div class="produto-card-img-placeholder">${tipoIcon}</div>`;
 
-    // ── Estoque ──────────────────────────────────────────────
     const semCtrl = p.estoque_qtd === null || p.estoque_qtd === undefined;
     const qtd = semCtrl ? "—" : p.estoque_qtd;
-    const estoqueStatusClass = semCtrl
-      ? ""
-      : p.estoque_qtd > 0
-        ? "estoque-ok"
-        : "estoque-zero";
-    const estoqueStatusLabel = semCtrl
-      ? ""
-      : p.estoque_qtd > 0
-        ? "Em estoque"
-        : "Sem estoque";
+    const estoqueStatusClass = semCtrl ? "" : p.estoque_qtd > 0 ? "estoque-ok" : "estoque-zero";
+    const estoqueStatusLabel = semCtrl ? "" : p.estoque_qtd > 0 ? "Em estoque" : "Sem estoque";
     const estoqueBadge = semCtrl
       ? `<span class="produto-card-estoque-qty">—</span>`
       : `<span class="produto-card-estoque-qty">${qtd} un</span>
          <span class="produto-card-estoque-status ${estoqueStatusClass}">${estoqueStatusLabel}</span>`;
 
-    // ── Validade ─────────────────────────────────────────────
     let validadeHtml = `<span style="color:#cbd5e1">—</span>`;
     if (p.data_validade) {
       const d = new Date(p.data_validade + "T00:00:00");
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
       const diff = Math.round((d - hoje) / 86400000);
-      const fmt = d.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-      });
+      const fmt = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
       const cor = diff < 0 ? "#dc2626" : diff <= 3 ? "#f59e0b" : "#94a3b8";
       validadeHtml = `<span style="color:${cor};font-size:0.75rem">${fmt}</span>`;
     }
 
-    // ── Badge pausado ────────────────────────────────────────
-    const badgePausado = !p.ativo
-      ? `<span class="badge-pausado" style="font-size:0.6rem">⏸ Pausado</span>`
-      : "";
-
-    // ── Produto info (meta) ──────────────────────────────────
+    const badgePausado = !p.ativo ? `<span class="badge-pausado" style="font-size:0.6rem">⏸ Pausado</span>` : "";
     const slugLabel = (p.categoria_slug || "").substring(0, 22);
-    const eanHtml = p.codigo_barras
-      ? `<span style="font-size:0.65rem;color:#94a3b8;font-family:monospace">${p.codigo_barras}</span>`
-      : "";
+    const eanHtml = p.codigo_barras ? `<span style="font-size:0.65rem;color:#94a3b8;font-family:monospace">${p.codigo_barras}</span>` : "";
 
     const card = document.createElement("div");
     card.className = `produto-card${!p.ativo ? " pausado" : ""}`;
     card.dataset.prodId = p.id;
     card.style.gridTemplateColumns = "32px 2.8fr 90px 130px 100px 70px 120px";
+    
     card.innerHTML = `
-      <!-- Col 0: Checkbox -->
       <div style="display:flex;align-items:center;justify-content:center">
-        <input type="checkbox" class="pt-chk-produto"
-          data-id="${p.id}"
-          style="width:15px;height:15px;cursor:pointer;accent-color:#1a7a2e"
-          onchange="ptAtualizarBarraBulk()">
+        <input type="checkbox" class="pt-chk-produto" 
+          data-id="${p.id}" 
+          ${_ptSelecionados.has(p.id) ? "checked" : ""}
+          style="width:15px;height:15px;cursor:pointer;accent-color:#1a7a2e" 
+          onchange="ptAtualizarBarraBulk(this)">
       </div>
-      <!-- Col 1: Produto -->
       <div class="produto-card-info">
         <div class="produto-card-img-wrap">${imgHtml}</div>
         <div class="produto-card-meta-wrap" style="min-width:0">
@@ -5626,21 +6153,14 @@ function renderizarCardsProdutos(lista) {
           </div>
         </div>
       </div>
-      <!-- Col 2: Preço -->
       <div class="produto-card-preco">Gs ${(p.preco || 0).toLocaleString("es-PY")}</div>
-      <!-- Col 3: Estoque -->
       <div class="produto-card-estoque">${estoqueBadge}</div>
-      <!-- Col 4: Validade -->
       <div class="produto-card-validade">${validadeHtml}</div>
-      <!-- Col 5: Destaque -->
       <div class="produto-card-destaque">
-        <button class="btn-destaque${p.destaque ? " ativo" : ""}"
-          onclick="toggleDestaqueProduto(${p.id}, ${!!p.destaque})"
-          title="${p.destaque ? "Remover destaque" : "Marcar como destaque"}">
+        <button class="btn-destaque${p.destaque ? " ativo" : ""}" onclick="toggleDestaqueProduto(${p.id}, ${!!p.destaque})" title="${p.destaque ? "Remover destaque" : "Marcar como destaque"}">
           ${p.destaque ? "★" : "☆"}
         </button>
       </div>
-      <!-- Col 6: Ações -->
       <div class="produto-card-actions">
         <button class="btn-print-barcode" onclick="imprimirCodigoBarras('${p.codigo_barras || ''}', '${p.nome.replace(/'/g, "\\'")}', 'Gs ${(p.preco || 0).toLocaleString('es-PY')}', ${p.id})">
             <i class="fas fa-barcode"></i> Imprimir Etiqueta
@@ -5651,9 +6171,7 @@ function renderizarCardsProdutos(lista) {
         <button class="btn btn-sm btn-info" onclick="duplicarProduto(${p.id})" title="Duplicar">
           <i class="fas fa-copy"></i>
         </button>
-        <button class="btn btn-sm ${p.ativo ? "btn-warning" : "btn-success"}"
-          onclick="pausarProduto(${p.id}, ${p.ativo})"
-          title="${p.ativo ? "Pausar" : "Reativar"}" style="background:${p.ativo ? "#f97316" : "#22c55e"}">
+        <button class="btn btn-sm ${p.ativo ? "btn-warning" : "btn-success"}" onclick="pausarProduto(${p.id}, ${p.ativo})" title="${p.ativo ? "Pausar" : "Reativar"}" style="background:${p.ativo ? "#f97316" : "#22c55e"}">
           <i class="fas fa-${p.ativo ? "pause" : "play"}"></i>
         </button>
         <button class="btn btn-sm btn-danger" onclick="deletarProduto(${p.id})" title="Excluir">
@@ -5663,55 +6181,271 @@ function renderizarCardsProdutos(lista) {
     `;
     grid.appendChild(card);
   });
+
+  // NOVO: Atualiza a barra com os itens que estão no Set (mesmo os que estão ocultos pelo filtro)
+  ptAtualizarBarraBulk();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ATUALIZAÇÃO EM LOTE (BULK UPDATE)
+// ══════════════════════════════════════════════════════════════
+
+// Carrega o rascunho salvo, se existir
+let _bulkUpdateDraft = JSON.parse(
+  localStorage.getItem("bulk_update_draft") || "{}",
+);
+
+function abrirModalBulkUpdate() {
+  const ids = _ptGetIdsSelecionados();
+  if (!ids.length) {
+    alert("Selecione pelo menos 1 produto para atualizar em lote.");
+    return;
+  }
+
+  // Filtra o draft apenas para os produtos selecionados no momento
+  const novoDraft = {};
+  ids.forEach((id) => {
+    if (_bulkUpdateDraft[id]) {
+      // Restaura do autosave se já existir
+      novoDraft[id] = _bulkUpdateDraft[id];
+    } else {
+      // Se não tem autosave, puxa os dados atuais do cache do produto
+      const p = _produtosMap[id];
+      if (p) {
+        novoDraft[id] = {
+          id: id,
+          nome: p.nome,
+          img: p.imagem_url || "",
+          codigo_barras: p.codigo_barras || "",
+          estoque_qtd: p.estoque_qtd ?? "",
+          preco: p.preco || 0,
+          preco_compra: p.preco_compra || "",
+          data_validade: p.data_validade || "",
+        };
+      }
+    }
+  });
+
+  _bulkUpdateDraft = novoDraft;
+  _renderBulkUpdateRows();
+  document.getElementById("modal-bulk-update").style.display = "flex";
+}
+
+function fecharModalBulkUpdate() {
+  document.getElementById("modal-bulk-update").style.display = "none";
+  // Não limpa o draft aqui! Apenas fecha o modal. O autosave cuida do resto.
+}
+
+function _renderBulkUpdateRows() {
+  const container = document.getElementById("bulk-update-list");
+  container.innerHTML = "";
+
+  const ids = Object.keys(_bulkUpdateDraft);
+  if (!ids.length) {
+    container.innerHTML =
+      '<p style="text-align:center;color:#888;padding:20px;">Nenhum produto para atualizar.</p>';
+    return;
+  }
+
+  ids.forEach((id) => {
+    const p = _bulkUpdateDraft[id];
+    const div = document.createElement("div");
+    div.style.cssText =
+      "border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-bottom: 12px; background: #fafafa;";
+
+    // Formata a imagem
+    const imgHtml = p.img
+      ? `<img src="${p.img}" style="width: 44px; height: 44px; border-radius: 6px; object-fit: cover;">`
+      : `<div style="width: 44px; height: 44px; border-radius: 6px; background: #e5e7eb; display:flex; align-items:center; justify-content:center; color:#9ca3af"><i class="fas fa-box"></i></div>`;
+
+    div.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">
+        ${imgHtml}
+        <div style="flex: 1;">
+          <div style="font-weight: 700; font-size: 0.95rem; color: #1f2937;">${p.nome}</div>
+          <div style="font-size: 0.75rem; color: #6b7280; font-family: monospace;">
+            ${p.codigo_barras ? "EAN: " + p.codigo_barras : "ID: #" + p.id}
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+        <div>
+          <label style="font-size: 0.72rem; font-weight: 600; color: #4b5563; display: block; margin-bottom: 4px;">Estoque Atual</label>
+          <input type="number" id="bulk-est-${p.id}" value="${p.estoque_qtd}" placeholder="∞ (Infinito)"
+            oninput="_bulkUpdateChange(${p.id}, 'estoque_qtd', this.value)"
+            style="width: 100%; padding: 8px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; font-weight: 700; outline: none;">
+        </div>
+        <div>
+          <label style="font-size: 0.72rem; font-weight: 600; color: #4b5563; display: block; margin-bottom: 4px;">Preço de Venda (Gs)</label>
+          <input type="number" id="bulk-preco-${p.id}" value="${p.preco}" 
+            oninput="_bulkUpdateChange(${p.id}, 'preco', this.value)"
+            style="width: 100%; padding: 8px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; font-weight: 700; color: var(--primary); outline: none;">
+        </div>
+        <div>
+          <label style="font-size: 0.72rem; font-weight: 600; color: #4b5563; display: block; margin-bottom: 4px;">Custo (Gs)</label>
+          <input type="number" id="bulk-custo-${p.id}" value="${p.preco_compra}" placeholder="Sem custo"
+            oninput="_bulkUpdateChange(${p.id}, 'preco_compra', this.value)"
+            style="width: 100%; padding: 8px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; font-weight: 700; color: #6b7280; outline: none;">
+        </div>
+        <div>
+          <label style="font-size: 0.72rem; font-weight: 600; color: #4b5563; display: block; margin-bottom: 4px;">Validade</label>
+          <input type="date" id="bulk-val-${p.id}" value="${p.data_validade}"
+            oninput="_bulkUpdateChange(${p.id}, 'data_validade', this.value)"
+            style="width: 100%; padding: 8px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; outline: none;">
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function _bulkUpdateChange(id, campo, valor) {
+  if (_bulkUpdateDraft[id]) {
+    _bulkUpdateDraft[id][campo] = valor;
+    // Salva no localStorage em tempo real (Autosave)
+    localStorage.setItem("bulk_update_draft", JSON.stringify(_bulkUpdateDraft));
+  }
+}
+
+async function salvarBulkUpdate() {
+  const ids = Object.keys(_bulkUpdateDraft);
+  if (!ids.length) return;
+
+  const btn = document.getElementById("btn-salvar-bulk");
+  const txtOrig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+
+  try {
+    const promises = ids.map(async (id) => {
+      const p = _bulkUpdateDraft[id];
+
+      // Prepara os dados validando campos vazios
+      const updateData = {};
+
+      // Estoque: vazio = null (infinito), senão número
+      if (
+        p.estoque_qtd === "" ||
+        p.estoque_qtd === null ||
+        p.estoque_qtd === undefined
+      ) {
+        updateData.estoque_qtd = null;
+      } else {
+        updateData.estoque_qtd = parseInt(p.estoque_qtd) || 0;
+      }
+
+      // Preço de venda (obrigatório)
+      updateData.preco = parseInt(p.preco) || 0;
+
+      // Preço de compra: vazio = null
+      if (
+        p.preco_compra === "" ||
+        p.preco_compra === null ||
+        p.preco_compra === undefined
+      ) {
+        updateData.preco_compra = null;
+      } else {
+        updateData.preco_compra = parseInt(p.preco_compra) || 0;
+      }
+
+      // Data de validade: vazio = null
+      updateData.data_validade = p.data_validade || null;
+
+      return supa.from("produtos").update(updateData).eq("id", id);
+    });
+
+    const results = await Promise.all(promises);
+    const erro = results.find((r) => r.error);
+
+    if (erro) {
+      throw new Error(erro.error.message);
+    }
+
+    // Sucesso: Limpa o rascunho e fecha
+    alert("✅ Produtos atualizados com sucesso!");
+    localStorage.removeItem("bulk_update_draft");
+    _bulkUpdateDraft = {};
+    document.getElementById("modal-bulk-update").style.display = "none";
+
+    // Recarrega a lista para refletir os novos valores e limpa os checkboxes
+    ptBulkDesmarcarTodos();
+    carregarProdutos();
+  } catch (e) {
+    alert("❌ Erro ao salvar atualizações: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = txtOrig;
+  }
 }
 
 // =========================================
 // BULK ACTIONS — Seleção e ações em massa
 // =========================================
 
-function ptAtualizarBarraBulk() {
-  const checkboxes = document.querySelectorAll(".pt-chk-produto");
-  const selecionados = document.querySelectorAll(".pt-chk-produto:checked");
+function ptAtualizarBarraBulk(checkbox) {
+  // Se veio um checkbox específico, atualiza a memória global
+  if (checkbox) {
+    const id = parseInt(checkbox.dataset.id);
+    if (checkbox.checked) _ptSelecionados.add(id);
+    else _ptSelecionados.delete(id);
+  }
+
   const barra = document.getElementById("pt-bulk-actions-bar");
   const chkTodos = document.getElementById("pt-chk-todos");
+  const checkboxes = document.querySelectorAll(".pt-chk-produto");
 
+  // Sincroniza os checkboxes visíveis na tela com a memória global
+  // (Isso garante que se um item estiver na memória, ele apareça marcado)
+  checkboxes.forEach(chk => {
+    const id = parseInt(chk.dataset.id);
+    const isChecked = _ptSelecionados.has(id);
+    chk.checked = isChecked;
+    
+    // Atualiza o visual do card (borda verde)
+    const card = chk.closest(".produto-card");
+    if (card) {
+      card.style.outline = isChecked ? "2px solid #1a7a2e" : "";
+      card.style.background = isChecked ? "#f0fdf4" : "";
+    }
+  });
+
+  // Atualiza a barra de ações
   if (barra) {
-    if (selecionados.length > 0) {
+    if (_ptSelecionados.size > 0) {
       barra.style.display = "flex";
       const countEl = document.getElementById("pt-bulk-count");
-      if (countEl)
-        countEl.textContent = `${selecionados.length} produto(s) selecionado(s)`;
+      // O tamanho agora reflete TODOS os itens selecionados, mesmo os que sumiram da tela pelo filtro
+      if (countEl) countEl.textContent = `${_ptSelecionados.size} produto(s) selecionado(s)`;
     } else {
       barra.style.display = "none";
     }
   }
 
-  // Atualiza estado do checkbox "selecionar todos"
+  // Atualiza o checkbox "Selecionar Todos" (do cabeçalho)
   if (chkTodos) {
-    chkTodos.indeterminate =
-      selecionados.length > 0 && selecionados.length < checkboxes.length;
-    chkTodos.checked =
-      checkboxes.length > 0 && selecionados.length === checkboxes.length;
+    const totalVisivel = checkboxes.length;
+    let marcadosVisiveis = 0;
+    checkboxes.forEach(c => { if (_ptSelecionados.has(parseInt(c.dataset.id))) marcadosVisiveis++; });
+    
+    chkTodos.indeterminate = marcadosVisiveis > 0 && marcadosVisiveis < totalVisivel;
+    chkTodos.checked = totalVisivel > 0 && marcadosVisiveis === totalVisivel;
   }
-
-  // Destaca visualmente os cards selecionados
-  document.querySelectorAll(".pt-chk-produto").forEach((chk) => {
-    const card = chk.closest(".produto-card");
-    if (card) {
-      card.style.outline = chk.checked ? "2px solid #1a7a2e" : "";
-      card.style.background = chk.checked ? "#f0fdf4" : "";
-    }
-  });
 }
 
 function ptToggleSelecionarTodos(checked) {
   document.querySelectorAll(".pt-chk-produto").forEach((chk) => {
-    chk.checked = checked;
+    const id = parseInt(chk.dataset.id);
+    if (checked) _ptSelecionados.add(id);
+    else _ptSelecionados.delete(id);
   });
   ptAtualizarBarraBulk();
 }
 
 function ptBulkDesmarcarTodos() {
+  // AQUI É O ÚNICO LUGAR QUE LIMPA A MEMÓRIA INTENCIONALMENTE
+  _ptSelecionados.clear();
+  
   document.querySelectorAll(".pt-chk-produto").forEach((chk) => {
     chk.checked = false;
   });
@@ -5724,9 +6458,7 @@ function ptBulkDesmarcarTodos() {
 }
 
 function _ptGetIdsSelecionados() {
-  return Array.from(document.querySelectorAll(".pt-chk-produto:checked"))
-    .map((chk) => parseInt(chk.dataset.id))
-    .filter(Boolean);
+  return Array.from(_ptSelecionados);
 }
 
 async function ptBulkPausar() {
@@ -5745,7 +6477,8 @@ async function ptBulkPausar() {
       alert("❌ Erro: " + error.message);
     } else {
       const msg = `⏸️ ${ids.length} produto(s) pausado(s)!`;
-      if (typeof mostrarToast === "function") mostrarToast(msg, "success", 3000);
+      if (typeof mostrarToast === "function")
+        mostrarToast(msg, "success", 3000);
       else alert(msg);
       ptBulkDesmarcarTodos();
       carregarProdutos();
@@ -5771,7 +6504,8 @@ async function ptBulkDespausar() {
       alert("❌ Erro: " + error.message);
     } else {
       const msg = `▶️ ${ids.length} produto(s) despausado(s)!`;
-      if (typeof mostrarToast === "function") mostrarToast(msg, "success", 3000);
+      if (typeof mostrarToast === "function")
+        mostrarToast(msg, "success", 3000);
       else alert(msg);
       ptBulkDesmarcarTodos();
       carregarProdutos();
@@ -5943,9 +6677,10 @@ async function salvarProduto() {
     // ── Preço base ────────────────────────────────────────────
     // Lê do campo principal. Se vazio e as faixas estão ativas com
     // unitário preenchido, usa a faixa unitária (evita gravar preco = 0).
-    const _precoEl      = document.getElementById("prod-preco");
-    const _faixaUniEl   = document.getElementById("prod-faixa-unitario");
-    const _faixasAtivas = document.getElementById("prod-tem-faixas")?.checked === true;
+    const _precoEl = document.getElementById("prod-preco");
+    const _faixaUniEl = document.getElementById("prod-faixa-unitario");
+    const _faixasAtivas =
+      document.getElementById("prod-tem-faixas")?.checked === true;
 
     let precoBase =
       parseInt(
@@ -5958,9 +6693,7 @@ async function salvarProduto() {
     if (precoBase <= 0 && _faixasAtivas && _faixaUniEl) {
       precoBase =
         parseInt(
-          _faixaUniEl.dataset?.valorNumerico ||
-            _faixaUniEl.value ||
-            "0",
+          _faixaUniEl.dataset?.valorNumerico || _faixaUniEl.value || "0",
           10,
         ) || 0;
     }
@@ -6038,7 +6771,8 @@ async function salvarProduto() {
         ? parseInt(document.getElementById("prod-estoque-qtd")?.value) || 0
         : null,
       estoque_minimo: document.getElementById("prod-tem-estoque")?.checked
-        ? parseInt(document.getElementById("prod-estoque-minimo")?.value) || null
+        ? parseInt(document.getElementById("prod-estoque-minimo")?.value) ||
+          null
         : null,
       preco_compra: (() => {
         const el = document.getElementById("prod-preco-compra");
@@ -6756,7 +7490,7 @@ async function uploadSaborImagem(fileInput, row) {
 
   try {
     // ── Upload para o Cloudinary (substitui Supabase Storage) ──
-    const url = await uploadImageToSupabase(file, 'sabores');
+    const url = await uploadImageToSupabase(file, "sabores");
 
     const inp =
       row.querySelector('[data-f="simg"]') ||
@@ -8976,13 +9710,14 @@ function _renderTabelaFrete(savedData) {
 
   FRETE_FAIXAS.forEach((faixa, idx) => {
     const saved = (savedData && savedData[idx]) || {};
-    const valLoja   = saved.loja ?? "";
-    const valMoto   = saved.motoboy ?? "";
+    const valLoja = saved.loja ?? "";
+    const valMoto = saved.motoboy ?? "";
     const aCombinar = saved.acombinar === true;
 
-    const bg = idx % 2 === 0
-      ? "var(--color-background-primary)"
-      : "var(--color-background-secondary)";
+    const bg =
+      idx % 2 === 0
+        ? "var(--color-background-primary)"
+        : "var(--color-background-secondary)";
     const rowStyle = aCombinar ? "opacity:0.55" : "";
 
     tbody.innerHTML += `
@@ -9017,17 +9752,17 @@ function _toggleFreteRow(idx, acombinar) {
   if (!row) return;
   const lojaInp = row.querySelector(".frete-loja");
   const motoInp = row.querySelector(".frete-motoboy");
-  const lbl     = row.querySelector("label");
+  const lbl = row.querySelector("label");
 
   row.style.opacity = acombinar ? "0.55" : "1";
 
   if (lojaInp) {
-    lojaInp.disabled     = acombinar;
+    lojaInp.disabled = acombinar;
     lojaInp.style.opacity = acombinar ? "0.4" : "1";
     if (acombinar) lojaInp.value = "";
   }
   if (motoInp) {
-    motoInp.disabled     = acombinar;
+    motoInp.disabled = acombinar;
     motoInp.style.opacity = acombinar ? "0.4" : "1";
     if (acombinar) motoInp.value = "";
   }
@@ -9043,11 +9778,15 @@ async function salvarTabelaFrete() {
 
     const loja = aCombinar
       ? 0
-      : parseInt(document.querySelector(`.frete-loja[data-idx="${idx}"]`)?.value) || 0;
+      : parseInt(
+          document.querySelector(`.frete-loja[data-idx="${idx}"]`)?.value,
+        ) || 0;
 
     const motoboy = aCombinar
       ? 0
-      : parseInt(document.querySelector(`.frete-motoboy[data-idx="${idx}"]`)?.value) || 0;
+      : parseInt(
+          document.querySelector(`.frete-motoboy[data-idx="${idx}"]`)?.value,
+        ) || 0;
 
     tabela.push({ loja, motoboy, acombinar: aCombinar });
   });
@@ -9197,7 +9936,7 @@ async function salvarPersonalizacao() {
       // ── Upload para o Cloudinary (substitui Supabase Storage) ──
       let iconeUrl;
       try {
-        iconeUrl = await uploadImageToSupabase(iconeFile, 'icones');
+        iconeUrl = await uploadImageToSupabase(iconeFile, "icones");
       } catch (uploadErr) {
         alert(
           "❌ Falha no upload do ícone: " +
@@ -9250,7 +9989,7 @@ async function _uploadLogoIdentidade(input) {
   if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
 
   try {
-    const url = await uploadImageToSupabase(file, 'sabores');
+    const url = await uploadImageToSupabase(file, "sabores");
 
     // Preenche o campo de URL de texto
     const urlInput = document.getElementById("cfg-logo-url");
@@ -9309,7 +10048,13 @@ async function _dashVerificarAlertas() {
 
     (prodsEstoque || []).forEach((p) => {
       const minimo = p.estoque_minimo ?? LIMITE_PADRAO;
-      const base = { id: p.id, tipo: "produto", nome: p.nome, qtd: p.estoque_qtd, minimo };
+      const base = {
+        id: p.id,
+        tipo: "produto",
+        nome: p.nome,
+        qtd: p.estoque_qtd,
+        minimo,
+      };
 
       if (p.estoque_qtd <= 0) {
         estoqueZerado.push(base);
@@ -9364,7 +10109,9 @@ async function _dashVerificarAlertas() {
       if (tituloEst) {
         tituloEst.textContent = estoqueZerado.length
           ? `⚠️ ${estoqueZerado.length} produto(s) sem estoque` +
-            (estoqueBaixo.length ? ` · ${estoqueBaixo.length} em nível crítico` : "")
+            (estoqueBaixo.length
+              ? ` · ${estoqueBaixo.length} em nível crítico`
+              : "")
           : `⚠️ Estoque baixo (${estoqueBaixo.length})`;
       }
 
@@ -9418,8 +10165,7 @@ async function _dashVerificarAlertas() {
 function _chipEstoque(item, severidade) {
   // severidade: "zero" | "critico" | "baixo"
   const icon = severidade === "zero" ? "🔴" : "⚠️";
-  const label =
-    severidade === "zero" ? "0" : `${item.qtd}/${item.minimo}`;
+  const label = severidade === "zero" ? "0" : `${item.qtd}/${item.minimo}`;
   const tipoTag = item.tipo === "variacao" ? " ·var" : "";
   return `<button class="dash-alerta-chip dash-alerta-chip--${severidade}"
     onclick="_dashAbrirProduto(${item.id})"
@@ -9501,9 +10247,15 @@ async function carregarDashboard() {
   // Data de hoje em Assunção (UTC-3) → converte para UTC para query correta
   const _agoraAsuncion = new Date();
   const _offMs = _getAsuncionOffsetMs(_agoraAsuncion);
-  const _inicioHojeLocal = new Date(_agoraAsuncion.toISOString().split("T")[0] + "T00:00:00");
-  const hojeUTCInicio = new Date(_inicioHojeLocal.getTime() + _offMs).toISOString();
-  const hojeUTCFim    = new Date(_inicioHojeLocal.getTime() + _offMs + 86399999).toISOString();
+  const _inicioHojeLocal = new Date(
+    _agoraAsuncion.toISOString().split("T")[0] + "T00:00:00",
+  );
+  const hojeUTCInicio = new Date(
+    _inicioHojeLocal.getTime() + _offMs,
+  ).toISOString();
+  const hojeUTCFim = new Date(
+    _inicioHojeLocal.getTime() + _offMs + 86399999,
+  ).toISOString();
 
   // Pedidos de hoje (todos exceto cancelado — igual ao Financeiro)
   const { data: pedidos } = await supa
@@ -9534,13 +10286,17 @@ async function carregarDashboard() {
   // incluindo balcão/retirada/local que não têm motoboy.
   const custoMotoReal = (pedidos || [])
     .filter((p) => p.tipo_entrega === "delivery")
-    .reduce((acc, p) => acc + (Number(p.frete_motoboy) || TAXA_MOTOBOY || 0), 0);
+    .reduce(
+      (acc, p) => acc + (Number(p.frete_motoboy) || TAXA_MOTOBOY || 0),
+      0,
+    );
   const qtdMotoboyUnicos = new Set(
     (pedidos || [])
       .filter((p) => p.tipo_entrega === "delivery" && p.motoboy_id)
       .map((p) => p.motoboy_id),
   ).size;
-  const custoMotoTotal = custoMotoReal + (AJUDA_COMBUSTIVEL || 0) * (qtdMotoboyUnicos || 0);
+  const custoMotoTotal =
+    custoMotoReal + (AJUDA_COMBUSTIVEL || 0) * (qtdMotoboyUnicos || 0);
   setVal("kpi-moto", `Gs ${custoMotoTotal.toLocaleString("es-PY")}`);
   setVal("kpi-em-preparo", emPreparo || 0);
 
@@ -9903,7 +10659,7 @@ function abrirModalAlterarSenha() {
 
 function _wlToggleSenha(inputId, spanId) {
   const inp = document.getElementById(inputId);
-  const sp  = document.getElementById(spanId);
+  const sp = document.getElementById(spanId);
   if (!inp) return;
   inp.type = inp.type === "password" ? "text" : "password";
   if (sp) sp.textContent = inp.type === "password" ? "👁" : "🙈";
@@ -9919,36 +10675,49 @@ function _wlToggleSenha(inputId, spanId) {
  * Retorna `true` somente se TODOS os critérios forem atendidos.
  */
 function _wlAvaliarSenha(v) {
-  v = v || '';
+  v = v || "";
   const checks = [
-    v.length >= 8,          // c1 — mínimo
-    /[a-z]/.test(v),        // c2 — minúscula
-    /[A-Z]/.test(v),        // c3 — maiúscula
-    /\d/.test(v),           // c4 — número
+    v.length >= 8, // c1 — mínimo
+    /[a-z]/.test(v), // c2 — minúscula
+    /[A-Z]/.test(v), // c3 — maiúscula
+    /\d/.test(v), // c4 — número
     /[^A-Za-z0-9]/.test(v), // c5 — especial
   ];
-  const txts   = ['Mín. 8 caracteres','Minúscula','Maiúscula','Número','Caractere especial'];
-  const cores  = ['#e2e8f0','#ef4444','#f97316','#eab308','#22c55e'];
-  const labels = ['','Fraca 😬','Razoável 😐','Boa 👍','Forte 💪','Excelente 🔒'];
-  const score  = checks.filter(Boolean).length;
+  const txts = [
+    "Mín. 8 caracteres",
+    "Minúscula",
+    "Maiúscula",
+    "Número",
+    "Caractere especial",
+  ];
+  const cores = ["#e2e8f0", "#ef4444", "#f97316", "#eab308", "#22c55e"];
+  const labels = [
+    "",
+    "Fraca 😬",
+    "Razoável 😐",
+    "Boa 👍",
+    "Forte 💪",
+    "Excelente 🔒",
+  ];
+  const score = checks.filter(Boolean).length;
 
   // Atualiza critérios individuais — admin tem 5 itens
   checks.forEach((ok, i) => {
-    const el = document.getElementById('wl-c' + (i + 1));
+    const el = document.getElementById("wl-c" + (i + 1));
     if (!el) return;
-    el.textContent = (ok ? '✓ ' : '✗ ') + txts[i];
-    el.style.color = ok ? '#22c55e' : '#bbb';
+    el.textContent = (ok ? "✓ " : "✗ ") + txts[i];
+    el.style.color = ok ? "#22c55e" : "#bbb";
   });
 
   // Barra de força — admin tem 4 segmentos (vou manter 4, mapeando 5 critérios)
   // score 0-1 → 0 barras | 2 → 1 | 3 → 2 | 4 → 3 | 5 → 4 (cheio)
   const barras = score <= 1 ? 0 : score - 1;
   for (let i = 1; i <= 4; i++) {
-    const b = document.getElementById('wl-b' + i);
-    if (b) b.style.background = i <= barras ? cores[score] : '#e2e8f0';
+    const b = document.getElementById("wl-b" + i);
+    if (b) b.style.background = i <= barras ? cores[score] : "#e2e8f0";
   }
 
-  const fl = document.getElementById('wl-forca-lbl');
+  const fl = document.getElementById("wl-forca-lbl");
   if (fl) {
     fl.textContent = labels[score];
     fl.style.color = cores[score];
@@ -10007,19 +10776,26 @@ function _wlVerificarMatch() {
 }
 
 async function wlSalvarNovaSenha() {
-  const nova   = document.getElementById("wl-nova-senha")?.value || "";
-  const conf   = document.getElementById("wl-conf-senha")?.value || "";
-  const msgEl  = document.getElementById("wl-msg-senha");
-  const showErr = (t) => { msgEl.textContent = t; msgEl.style.display = "block"; };
+  const nova = document.getElementById("wl-nova-senha")?.value || "";
+  const conf = document.getElementById("wl-conf-senha")?.value || "";
+  const msgEl = document.getElementById("wl-msg-senha");
+  const showErr = (t) => {
+    msgEl.textContent = t;
+    msgEl.style.display = "block";
+  };
   msgEl.style.display = "none";
 
   // ── Política de senha forte ─────────────────────────────────────
-  if (nova.length < 8)             return showErr("A senha deve ter pelo menos 8 caracteres.");
-  if (!/[a-z]/.test(nova))         return showErr("Falta ao menos uma letra minúscula.");
-  if (!/[A-Z]/.test(nova))         return showErr("Falta ao menos uma letra maiúscula.");
-  if (!/\d/.test(nova))            return showErr("Falta ao menos um número.");
-  if (!/[^A-Za-z0-9]/.test(nova))  return showErr("Falta ao menos um caractere especial (ex: !@#$%).");
-  if (nova !== conf)               return showErr("As senhas não coincidem.");
+  if (nova.length < 8)
+    return showErr("A senha deve ter pelo menos 8 caracteres.");
+  if (!/[a-z]/.test(nova))
+    return showErr("Falta ao menos uma letra minúscula.");
+  if (!/[A-Z]/.test(nova))
+    return showErr("Falta ao menos uma letra maiúscula.");
+  if (!/\d/.test(nova)) return showErr("Falta ao menos um número.");
+  if (!/[^A-Za-z0-9]/.test(nova))
+    return showErr("Falta ao menos um caractere especial (ex: !@#$%).");
+  if (nova !== conf) return showErr("As senhas não coincidem.");
 
   const btn = document.getElementById("wl-btn-salvar-senha");
   if (btn) {
@@ -10116,7 +10892,9 @@ async function carregarPDV() {
   _injetarBadgeNoMenuPDV();
   await _atualizarBadgePedidosPendentes();
 
-    _pdvRealocarBuscaParaTopo();
+  _pdvRealocarBuscaParaTopo();
+
+  _pdvInjetarUiNaNota();
 
   // ⚠️ Revalida cache quando o operador volta o foco ao PDV.
   // Evita vender produto que esgotou enquanto a aba estava em background
@@ -10165,12 +10943,12 @@ async function carregarPDV() {
  *    _sessaoCaixaAtiva para registrar a movimentação.
  */
 function _pdvAtualizarPainelCaixa() {
-  const elStatus       = document.getElementById("pdv-status-caixa");
-  const btnAbrir       = document.getElementById("pdv-btn-abrir-caixa");
-  const btnFechar      = document.getElementById("pdv-btn-fechar-caixa");
-  const btnSuprimento  = document.getElementById("pdv-btn-suprimento");
-  const btnSangria     = document.getElementById("pdv-btn-sangria");
-  const btnDespesa     = document.getElementById("pdv-btn-despesa");
+  const elStatus = document.getElementById("pdv-status-caixa");
+  const btnAbrir = document.getElementById("pdv-btn-abrir-caixa");
+  const btnFechar = document.getElementById("pdv-btn-fechar-caixa");
+  const btnSuprimento = document.getElementById("pdv-btn-suprimento");
+  const btnSangria = document.getElementById("pdv-btn-sangria");
+  const btnDespesa = document.getElementById("pdv-btn-despesa");
   if (!elStatus) return;
 
   const botoesMov = [btnSuprimento, btnSangria, btnDespesa];
@@ -10187,14 +10965,18 @@ function _pdvAtualizarPainelCaixa() {
 
     // Caixa aberto → esconde "Abrir", mostra movimentações + "Fechar"
     if (btnAbrir) btnAbrir.style.display = "none";
-    botoesMov.forEach((b) => { if (b) b.style.display = "inline-flex"; });
+    botoesMov.forEach((b) => {
+      if (b) b.style.display = "inline-flex";
+    });
     if (btnFechar) btnFechar.style.display = "inline-flex";
   } else {
     elStatus.innerHTML = `<span style="color:#e74c3c">🔴 Caixa fechado — abra para registrar vendas</span>`;
 
     // Caixa fechado → mostra "Abrir", esconde movimentações + "Fechar"
     if (btnAbrir) btnAbrir.style.display = "inline-flex";
-    botoesMov.forEach((b) => { if (b) b.style.display = "none"; });
+    botoesMov.forEach((b) => {
+      if (b) b.style.display = "none";
+    });
     if (btnFechar) btnFechar.style.display = "none";
   }
 }
@@ -10376,11 +11158,11 @@ let _pdvF2Mode = false;
 function togglePdvF2Mode() {
   _pdvF2Mode = !_pdvF2Mode;
 
-  const btn    = document.getElementById("pdv-f2-btn");
-  const badge  = document.getElementById("pdv-f2-badge");
-  const input  = document.getElementById("pdv-busca");
+  const btn = document.getElementById("pdv-f2-btn");
+  const badge = document.getElementById("pdv-f2-badge");
+  const input = document.getElementById("pdv-busca");
 
-  if (btn)   btn.classList.toggle("active", _pdvF2Mode);
+  if (btn) btn.classList.toggle("active", _pdvF2Mode);
   if (badge) badge.style.display = _pdvF2Mode ? "inline-flex" : "none";
 
   // ── Feedback visual no campo de busca ──
@@ -10388,12 +11170,12 @@ function togglePdvF2Mode() {
   if (input) {
     if (_pdvF2Mode) {
       input.style.borderColor = "#1565c0";
-      input.style.boxShadow   = "0 0 0 3px rgba(21,101,192,0.15)";
-      input.placeholder       = "🔍 MODO PREÇO (F2) — consultar sem adicionar";
+      input.style.boxShadow = "0 0 0 3px rgba(21,101,192,0.15)";
+      input.placeholder = "🔍 MODO PREÇO (F2) — consultar sem adicionar";
     } else {
       input.style.borderColor = "";
-      input.style.boxShadow   = "";
-      input.placeholder       = "🔍 Buscar produto, código ou escanear...";
+      input.style.boxShadow = "";
+      input.placeholder = "🔍 Buscar produto, código ou escanear...";
     }
     input.focus();
     input.select();
@@ -10411,20 +11193,26 @@ function togglePdvF2Mode() {
 
 async function pdvBuscaKeydown(e) {
   const dropdown = document.getElementById("pdv-busca-resultados");
-  const itens = dropdown ? [...dropdown.querySelectorAll(".pdv-resultado-item")] : [];
+  const itens = dropdown
+    ? [...dropdown.querySelectorAll(".pdv-resultado-item")]
+    : [];
 
   // ── Navegação ↓↑ no dropdown ────────────────────────────
   if (e.key === "ArrowDown" && itens.length) {
     e.preventDefault();
     _pdvDropdownIdx = Math.min(_pdvDropdownIdx + 1, itens.length - 1);
-    itens.forEach((el, i) => el.classList.toggle("pdv-resultado-ativo", i === _pdvDropdownIdx));
+    itens.forEach((el, i) =>
+      el.classList.toggle("pdv-resultado-ativo", i === _pdvDropdownIdx),
+    );
     itens[_pdvDropdownIdx]?.scrollIntoView({ block: "nearest" });
     return;
   }
   if (e.key === "ArrowUp" && itens.length) {
     e.preventDefault();
     _pdvDropdownIdx = Math.max(_pdvDropdownIdx - 1, 0);
-    itens.forEach((el, i) => el.classList.toggle("pdv-resultado-ativo", i === _pdvDropdownIdx));
+    itens.forEach((el, i) =>
+      el.classList.toggle("pdv-resultado-ativo", i === _pdvDropdownIdx),
+    );
     itens[_pdvDropdownIdx]?.scrollIntoView({ block: "nearest" });
     return;
   }
@@ -10448,7 +11236,7 @@ async function pdvBuscaKeydown(e) {
   }
 
   // ── Enter ────────────────────────────────────────────────
-    if (e.key === "Enter") {
+  if (e.key === "Enter") {
     e.preventDefault();
     const rawBusca = (e.target.value || "").trim();
     if (!rawBusca) return;
@@ -10462,7 +11250,9 @@ async function pdvBuscaKeydown(e) {
 
     // Item ativo no dropdown → selecionar
     if (_pdvDropdownIdx >= 0 && itens[_pdvDropdownIdx]) {
-      itens[_pdvDropdownIdx].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      itens[_pdvDropdownIdx].dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true }),
+      );
       return;
     }
 
@@ -10570,7 +11360,7 @@ function filtrarPDV(valor) {
   if (!dropdown) return;
 
   const colEsq = document.querySelector(".pdv-col-esq");
-  const query  = (valor || "").trim();
+  const query = (valor || "").trim();
 
   // Sem texto → fecha dropdown e sai do modo busca
   if (!query) {
@@ -10588,9 +11378,12 @@ function filtrarPDV(valor) {
 
   const ql = query.toLowerCase();
   const resultados = (produtosCachePDV || [])
-    .filter((p) => p.ativo !== false &&
-      (p.nome.toLowerCase().includes(ql) ||
-       (p.codigo_barras && String(p.codigo_barras).includes(ql))))
+    .filter(
+      (p) =>
+        p.ativo !== false &&
+        (p.nome.toLowerCase().includes(ql) ||
+          (p.codigo_barras && String(p.codigo_barras).includes(ql))),
+    )
     .slice(0, 30);
 
   dropdown.innerHTML = "";
@@ -10608,21 +11401,29 @@ function filtrarPDV(valor) {
     item.dataset.idx = i;
 
     let cfg = p.montagem_config;
-    if (typeof cfg === "string") { try { cfg = JSON.parse(cfg); } catch(_) { cfg = null; } }
+    if (typeof cfg === "string") {
+      try {
+        cfg = JSON.parse(cfg);
+      } catch (_) {
+        cfg = null;
+      }
+    }
     const isKg = cfg && !Array.isArray(cfg) && cfg.__tipo === "kg";
-    const preco = isKg ? (cfg.preco_kg || p.preco || 0) : (p.preco || 0);
+    const preco = isKg ? cfg.preco_kg || p.preco || 0 : p.preco || 0;
     const precoStr = `Gs ${preco.toLocaleString("es-PY")}${isKg ? "/kg" : ""}`;
-    const catNome = (produtosCatsPDV || []).find(c => c.slug === p.categoria_slug)?.nome_exibicao || "";
+    const catNome =
+      (produtosCatsPDV || []).find((c) => c.slug === p.categoria_slug)
+        ?.nome_exibicao || "";
 
     const fotoHtml = p.imagem_url
       ? `<img class="pdv-resultado-foto" src="${p.imagem_url}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : ``;
-    const fotoNone = `<div class="pdv-resultado-foto-none" ${p.imagem_url ? 'style="display:none"' : ''}><i class="fas fa-box"></i></div>`;
+    const fotoNone = `<div class="pdv-resultado-foto-none" ${p.imagem_url ? 'style="display:none"' : ""}><i class="fas fa-box"></i></div>`;
 
     item.innerHTML = `
       ${fotoHtml}${fotoNone}
       <div class="pdv-resultado-info">
-        <div class="pdv-resultado-nome">${p.nome}${isKg ? ' <span style="font-size:0.72rem;color:#888">⚖️ kg</span>' : ''}</div>
+        <div class="pdv-resultado-nome">${p.nome}${isKg ? ' <span style="font-size:0.72rem;color:#888">⚖️ kg</span>' : ""}</div>
         <div class="pdv-resultado-preco">${precoStr}</div>
         ${catNome ? `<div class="pdv-resultado-cat">${catNome}</div>` : ""}
       </div>`;
@@ -10644,24 +11445,30 @@ function _pdvSelecionarResultado(p) {
     // Extrai o preço — considera venda por kg
     let cfg = p.montagem_config;
     if (typeof cfg === "string") {
-      try { cfg = JSON.parse(cfg); } catch (_) { cfg = null; }
+      try {
+        cfg = JSON.parse(cfg);
+      } catch (_) {
+        cfg = null;
+      }
     }
     const isKg = cfg && !Array.isArray(cfg) && cfg.__tipo === "kg";
-    const preco = isKg ? (cfg.preco_kg || p.preco || 0) : (p.preco || 0);
+    const preco = isKg ? cfg.preco_kg || p.preco || 0 : p.preco || 0;
     const precoFmt = `Gs ${preco.toLocaleString("es-PY")}${isKg ? "/kg" : ""}`;
 
     // Toast grande com o preço (fica visível por 3.5s)
-    _pdvMostrarToast(
-      `🔍 ${p.nome} — ${precoFmt}`,
-      "#1565c0",
-      3500,
-    );
+    _pdvMostrarToast(`🔍 ${p.nome} — ${precoFmt}`, "#1565c0", 3500);
 
     // Limpa input, fecha dropdown, mas MANTÉM o modo F2 ativo para a próxima consulta
     const input = document.getElementById("pdv-busca");
-    if (input) { input.value = ""; input.focus(); }
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
     const dropdown = document.getElementById("pdv-busca-resultados");
-    if (dropdown) { dropdown.style.display = "none"; dropdown.innerHTML = ""; }
+    if (dropdown) {
+      dropdown.style.display = "none";
+      dropdown.innerHTML = "";
+    }
     document.querySelector(".pdv-col-esq")?.classList.remove("pdv-buscando");
     _pdvDropdownIdx = -1;
     return; // ← sai sem adicionar
@@ -10670,9 +11477,15 @@ function _pdvSelecionarResultado(p) {
   // ── Modo normal: adiciona ao carrinho ─────────────────────────────────
   adicionarItemPDV(p);
   const input = document.getElementById("pdv-busca");
-  if (input) { input.value = ""; input.focus(); }
+  if (input) {
+    input.value = "";
+    input.focus();
+  }
   const dropdown = document.getElementById("pdv-busca-resultados");
-  if (dropdown) { dropdown.style.display = "none"; dropdown.innerHTML = ""; }
+  if (dropdown) {
+    dropdown.style.display = "none";
+    dropdown.innerHTML = "";
+  }
   document.querySelector(".pdv-col-esq")?.classList.remove("pdv-buscando");
   _pdvDropdownIdx = -1;
 }
@@ -10685,7 +11498,10 @@ function _pdvFecharDropdown() {
 
 // Fechar dropdown ao clicar fora
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#pdv-busca-resultados") && e.target.id !== "pdv-busca") {
+  if (
+    !e.target.closest("#pdv-busca-resultados") &&
+    e.target.id !== "pdv-busca"
+  ) {
     _pdvFecharDropdown();
   }
 });
@@ -10803,21 +11619,22 @@ function adicionarItemPDV(p) {
     return;
   }
 
-    // Simples / Lanche / Bebida / Combo — adiciona direto
-    // Aplica o multiplicador atual (botões +5/+10 ou prefixo "10+")
-    const mult = Math.max(1, parseInt(window._pdvQtyMultiplier || 1, 10));
-    const existe = carrinhoPDV.find((i) => i.id === p.id && !i.variacao);
-    if (existe) existe.qtd += mult;
-    else carrinhoPDV.push({
+  // Simples / Lanche / Bebida / Combo — adiciona direto
+  // Aplica o multiplicador atual (botões +5/+10 ou prefixo "10+")
+  const mult = Math.max(1, parseInt(window._pdvQtyMultiplier || 1, 10));
+  const existe = carrinhoPDV.find((i) => i.id === p.id && !i.variacao);
+  if (existe) existe.qtd += mult;
+  else
+    carrinhoPDV.push({
       ...p,
       qtd: mult,
       montagem: [],
       obs: "",
       _extrasSoma: 0,
     });
-    // Reseta multiplicador após adicionar
-    pdvSetQtyMultiplier(1);
-    atualizarCarrinhoPDV();
+  // Reseta multiplicador após adicionar
+  pdvSetQtyMultiplier(1);
+  atualizarCarrinhoPDV();
 
   if (_deveMostrarExtrasGlobais(p)) {
     _getExtrasGlobais().then((extras) => {
@@ -12125,7 +12942,7 @@ function atualizarCarrinhoPDV() {
 
   // ── Aplica faixas de preço ANTES de renderizar ──
   vfRecalcularCarrinho(carrinhoPDV, (pid) =>
-    produtosCachePDV.find((p) => p.id == pid)
+    produtosCachePDV.find((p) => p.id == pid),
   );
 
   lista.innerHTML = "";
@@ -12152,7 +12969,8 @@ function atualizarCarrinhoPDV() {
       total += preco * qtd;
 
       const row = document.createElement("tr");
-      row.className = "pdv-item-existente" + (entregue ? " pdv-item-entregue" : "");
+      row.className =
+        "pdv-item-existente" + (entregue ? " pdv-item-entregue" : "");
       row.innerHTML = `
         <td colspan="4" class="pdv-item-card">
           <div class="pdv-item-card-header">
@@ -12160,12 +12978,16 @@ function atualizarCarrinhoPDV() {
             <span class="pdv-item-card-total" style="${entregue ? "color:#888" : ""}">Gs ${(preco * qtd).toLocaleString("es-PY")}</span>
           </div>
           <div class="pdv-item-card-sub">Gs ${preco.toLocaleString("es-PY")} / un. · ${qtd}x${entregue ? " · <em style='color:#27ae60;font-weight:700'>✓ Entregue</em>" : ""}</div>
-          ${!entregue ? `
+          ${
+            !entregue
+              ? `
           <div class="pdv-item-card-acoes">
             <button class="pdv-item-card-excluir" style="background:#e8f5e9;color:#27ae60;border-color:#86efac" title="Baixar item" onclick="baixarItemMesa(${window._mesaAbertaId},${idx})">
               <i class="fas fa-check"></i> Baixar
             </button>
-          </div>` : ""}
+          </div>`
+              : ""
+          }
         </td>`;
       lista.appendChild(row);
     });
@@ -12323,6 +13145,8 @@ function atualizarInfoPagPDV(total) {
   const infoBox = document.getElementById("balcao-pag-info");
   const boxMultiPDV = document.getElementById("box-multi-pdv");
   const selectPag = document.getElementById("balcao-pag");
+  _pdvToggleBlocoNaNota(pag);
+
   if (!infoBox) return;
 
   // Mostra/oculta campo Recebido + Troco conforme forma de pagamento
@@ -12779,7 +13603,8 @@ async function salvarPedidoBalcao() {
   const _txtOrigBtn = _btnLancar ? _btnLancar.innerHTML : "";
   if (_btnLancar) {
     _btnLancar.disabled = true;
-    _btnLancar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+    _btnLancar.innerHTML =
+      '<i class="fas fa-spinner fa-spin"></i> Processando...';
     _btnLancar.style.opacity = "0.65";
   }
   const _liberarPDV = () => {
@@ -12795,387 +13620,423 @@ async function salvarPedidoBalcao() {
 
   // Envolve o corpo da função em try/finally para garantir liberação
   try {
-
     if (carrinhoPDV.length === 0 && !window._mesaAbertaId) {
-    alert(t("alert.carrinho_vazio"));
-    return;
-  }
-  if (carrinhoPDV.length === 0 && window._mesaAbertaId) {
-    alert("Adicione ao menos 1 novo item antes de lançar.");
-    return;
-  }
-
-  // ── TRAVA: verifica caixa aberto no banco antes de vender ──────
-  const _caixaStatus = await _pdvCaixaEstaAberto();
-  if (!_caixaStatus.aberto) {
-    _pdvMostrarBloqueioCaixaFechado();
-    return; // não libera o envio
-  }
-
-  const _soKg = carrinhoPDV.length > 0 && carrinhoPDV.every((i) => i._isKg);
-
-  // const mesaInput = document.getElementById("balcao-mesa");
-  //   if (mesaInput) mesaInput.value = "";
-
-  const mesaEl = document.getElementById("balcao-mesa");
-  const clienteEl = document.getElementById("balcao-cliente");
-  const telefoneEl = document.getElementById("balcao-telefone");
-  const pagEl = document.getElementById("balcao-pag");
-
-  const cli = clienteEl?.value?.trim() || "Cliente";
-  const tel = telefoneEl?.value?.trim() || "";
-  const pag = pagEl?.value || "Efetivo";
-  const mesa = "";
-  const pagFinalPDV =
-    pag === "CartaoBR"
-      ? _cartaoBRTipoPDV === "debito"
-        ? "Cartão BR - Débito"
-        : "Cartão BR - Crédito"
-      : pag;
-
-  const nomeFinal = mesa
-    ? `MESA ${mesa} - ${cliente}`
-    : _soKg
-      ? `BALCÃO KG - ${cli}`
-      : `BALCÃO - ${cli}`;
-
-  // ── Desconto manual ──────────────────────────────────────────
-  const descTipo =
-    document.getElementById("pdv-desconto-tipo")?.value || "fixo";
-  const descValRaw =
-    parseFloat(document.getElementById("pdv-desconto-val")?.value || "0") || 0;
-  const subtotalBruto = carrinhoPDV.reduce(
-    (a, i) => a + (i.preco || 0) * (i.qtd || 1),
-    0,
-  );
-  let descontoAplicado = 0;
-  if (descValRaw > 0) {
-    descontoAplicado =
-      descTipo === "percentual"
-        ? Math.round((subtotalBruto * descValRaw) / 100)
-        : Math.round(descValRaw);
-    descontoAplicado = Math.min(descontoAplicado, subtotalBruto); // não pode ser maior que o total
-  }
-
-  // ── Tratamento Multipagamento ────────────────────────────────
-  let obsPagPDV = "Pagamento no Balcão";
-  if (pag === "Multipagamento") {
-    const partesPDV = _coletarMultiPagamentoPDV();
-    if (partesPDV.length === 0) {
-      alert("Adicione ao menos 1 forma de pagamento!");
+      alert(t("alert.carrinho_vazio"));
       return;
     }
-    const totalPedido = parseInt(
-      document.getElementById("balcao-total")?.innerText.replace(/\D/g, "") ||
-        "0",
-    );
-    const somaPartes = partesPDV.reduce((a, p) => a + p.valor, 0);
-    if (Math.abs(somaPartes - totalPedido) > 1) {
-      alert(
-        `⚠️ Total das formas (Gs ${somaPartes.toLocaleString("es-PY")}) não bate com o total do pedido (Gs ${totalPedido.toLocaleString("es-PY")}).`,
-      );
+    if (carrinhoPDV.length === 0 && window._mesaAbertaId) {
+      alert("Adicione ao menos 1 novo item antes de lançar.");
       return;
     }
-    obsPagPDV = JSON.stringify(partesPDV);
-  }
 
-  // ── Novos itens ganham status_item: 'pendente' ─────────────────
-  const novosItens = carrinhoPDV.map((i) => ({
-    produto_id: i._isExtra ? null : (i.produto_id ?? i.id ?? null),
-    id: i.id || Date.now() + Math.random(),
-    nome: i.nome,
-    preco: i.preco,
-    qtd: i.qtd,
-    montagem: i.montagem || [],
-    obs: i.obs || "",
-    categoria_slug: i.categoria_slug || "",
-    es_bebida: i.es_bebida || false,
-    ...(i._isKg
-      ? { peso_gramas: i.peso_gramas, preco_kg: i.preco_kg, _isKg: true }
-      : {}),
-    _tier: i._faixaTier ?? null,
-    _faixaAplicada: i._faixaAplicada ?? null,
-    _extrasSoma: i._extrasSoma ?? 0,
-    status_item: "pendente", // ← campo de status por item
-    lancado_em: new Date().toISOString(),
-  }));
+    // ── TRAVA: verifica caixa aberto no banco antes de vender ──────
+    const _caixaStatus = await _pdvCaixaEstaAberto();
+    if (!_caixaStatus.aberto) {
+      _pdvMostrarBloqueioCaixaFechado();
+      return; // não libera o envio
+    }
 
-  if (window._mesaAbertaId) {
-    // ── UPDATE: mantém itens existentes (com seus status_item atuais)
-    //           e acrescenta apenas os novos itens pendentes ──────────
-    const itensExistentes = Array.isArray(window._mesaAbertaPedido?.itens)
-      ? window._mesaAbertaPedido.itens
-      : [];
+    const _soKg = carrinhoPDV.length > 0 && carrinhoPDV.every((i) => i._isKg);
 
-    const itensMerged = [...itensExistentes, ...novosItens];
-    // Itens kg: preco já é o total pesado (preco_kg × peso), não multiplicar por qtd
-    const novoTotal = itensMerged.reduce(
-      (acc, i) =>
-        acc + (i._isKg ? i.preco || 0 : (i.preco || 0) * (i.qtd || 1)),
+    // const mesaInput = document.getElementById("balcao-mesa");
+    //   if (mesaInput) mesaInput.value = "";
+
+    const mesaEl = document.getElementById("balcao-mesa");
+    const clienteEl = document.getElementById("balcao-cliente");
+    const telefoneEl = document.getElementById("balcao-telefone");
+    const pagEl = document.getElementById("balcao-pag");
+
+    const cli = clienteEl?.value?.trim() || "Cliente";
+    const tel = telefoneEl?.value?.trim() || "";
+    const pag = pagEl?.value || "Efetivo";
+    const mesa = "";
+    const pagFinalPDV =
+      pag === "CartaoBR"
+        ? _cartaoBRTipoPDV === "debito"
+          ? "Cartão BR - Débito"
+          : "Cartão BR - Crédito"
+        : pag;
+
+    // Substitua o bloco antigo por este:
+    let nomeFinal = "";
+    if (pag === "NaNota") {
+      nomeFinal = cli; // Salva APENAS o nome para o Fiado
+    } else {
+      nomeFinal = mesa
+        ? `MESA ${mesa} - ${cli}`
+        : _soKg
+          ? `BALCÃO KG - ${cli}`
+          : `BALCÃO - ${cli}`;
+    }
+
+    // ── Desconto manual ──────────────────────────────────────────
+    const descTipo =
+      document.getElementById("pdv-desconto-tipo")?.value || "fixo";
+    const descValRaw =
+      parseFloat(document.getElementById("pdv-desconto-val")?.value || "0") ||
+      0;
+    const subtotalBruto = carrinhoPDV.reduce(
+      (a, i) => a + (i.preco || 0) * (i.qtd || 1),
       0,
     );
+    let descontoAplicado = 0;
+    if (descValRaw > 0) {
+      descontoAplicado =
+        descTipo === "percentual"
+          ? Math.round((subtotalBruto * descValRaw) / 100)
+          : Math.round(descValRaw);
+      descontoAplicado = Math.min(descontoAplicado, subtotalBruto); // não pode ser maior que o total
+    }
 
-    const { error } = await supa
-      .from("pedidos")
-      .update({
-        itens: itensMerged,
-        total_geral: novoTotal,
-        subtotal: novoTotal,
-        forma_pagamento: pagFinalPDV,
-        obs_pagamento: obsPagPDV,
-        cliente_nome: nomeFinal,
-        cliente_telefone: tel,
-        status: "em_preparo",
-      })
-      .eq("id", window._mesaAbertaId);
+    if (pag === "NaNota") {
+      if (!cli || cli.trim().toLowerCase() === "cliente" || !tel) {
+        alert(
+          "⚠️ Para lançar na nota (Fiado), é OBRIGATÓRIO informar o Nome e o Telefone do cliente.",
+        );
+        return; // Impede que a venda seja finalizada
+      }
+    }
 
-    if (error) {
-      alert("Erro ao atualizar mesa: " + error.message);
+    // ── Tratamento Multipagamento ────────────────────────────────
+    let obsPagPDV = "Pagamento no Balcão";
+    if (pag === "Multipagamento") {
+      const partesPDV = _coletarMultiPagamentoPDV();
+      if (partesPDV.length === 0) {
+        alert("Adicione ao menos 1 forma de pagamento!");
+        return;
+      }
+      const totalPedido = parseInt(
+        document.getElementById("balcao-total")?.innerText.replace(/\D/g, "") ||
+          "0",
+      );
+      const somaPartes = partesPDV.reduce((a, p) => a + p.valor, 0);
+      if (Math.abs(somaPartes - totalPedido) > 1) {
+        alert(
+          `⚠️ Total das formas (Gs ${somaPartes.toLocaleString("es-PY")}) não bate com o total do pedido (Gs ${totalPedido.toLocaleString("es-PY")}).`,
+        );
+        return;
+      }
+      obsPagPDV = JSON.stringify(partesPDV);
+    }
+
+    // ── Novos itens ganham status_item: 'pendente' ─────────────────
+    const novosItens = carrinhoPDV.map((i) => ({
+      produto_id: i._isExtra ? null : (i.produto_id ?? i.id ?? null),
+      id: i.id || Date.now() + Math.random(),
+      nome: i.nome,
+      preco: i.preco,
+      qtd: i.qtd,
+      montagem: i.montagem || [],
+      obs: i.obs || "",
+      categoria_slug: i.categoria_slug || "",
+      es_bebida: i.es_bebida || false,
+      ...(i._isKg
+        ? { peso_gramas: i.peso_gramas, preco_kg: i.preco_kg, _isKg: true }
+        : {}),
+      _tier: i._faixaTier ?? null,
+      _faixaAplicada: i._faixaAplicada ?? null,
+      _extrasSoma: i._extrasSoma ?? 0,
+      status_item: "pendente", // ← campo de status por item
+      lancado_em: new Date().toISOString(),
+    }));
+
+    if (window._mesaAbertaId) {
+      // ── UPDATE: mantém itens existentes (com seus status_item atuais)
+      //           e acrescenta apenas os novos itens pendentes ──────────
+      const itensExistentes = Array.isArray(window._mesaAbertaPedido?.itens)
+        ? window._mesaAbertaPedido.itens
+        : [];
+
+      const itensMerged = [...itensExistentes, ...novosItens];
+      // Itens kg: preco já é o total pesado (preco_kg × peso), não multiplicar por qtd
+      const novoTotal = itensMerged.reduce(
+        (acc, i) =>
+          acc + (i._isKg ? i.preco || 0 : (i.preco || 0) * (i.qtd || 1)),
+        0,
+      );
+
+      const { error } = await supa
+        .from("pedidos")
+        .update({
+          itens: itensMerged,
+          total_geral: novoTotal,
+          subtotal: novoTotal,
+          forma_pagamento: pagFinalPDV,
+          obs_pagamento: obsPagPDV,
+          cliente_nome: nomeFinal,
+          cliente_telefone: tel,
+          status: "em_preparo",
+        })
+        .eq("id", window._mesaAbertaId);
+
+      if (error) {
+        alert("Erro ao atualizar mesa: " + error.message);
+        return;
+      }
+      // Descontar estoque dos novos itens adicionados
+      const _resDescMesa = await _descontarEstoqueVendaItens(novosItens);
+      // 🔧 Marca a flag com o resultado REAL — evita mascarar falha silenciosa
+      // (mantém rastreabilidade e evita duplo desconto em mudarStatus('em_preparo'))
+      await supa
+        .from("pedidos")
+        .update({ estoque_descontado: _resDescMesa.ok })
+        .eq("id", window._mesaAbertaId);
+      await _alertarFalhaEstoque(
+        _resDescMesa,
+        `Mesa — Pedido #${window._mesaAbertaId}`,
+      );
+
+      // Reset
+      window._mesaAbertaId = null;
+      window._mesaAbertaTotal = 0;
+      window._mesaAbertaPedido = null;
+      carrinhoPDV = [];
+      document.getElementById("balcao-cliente").value = "";
+      document.getElementById("balcao-mesa").value = "";
+      document.getElementById("balcao-telefone").value = "";
+      document.querySelector(".pdv-mesa-aviso")?.remove();
+      atualizarCarrinhoPDV();
+      atualizarBarraMesasAtivas();
+      carregarMonitorMesas();
+      alert(`✅ ${novosItens.length} item(s) enviado(s) para separação!`);
       return;
     }
-    // Descontar estoque dos novos itens adicionados
-    const _resDescMesa = await _descontarEstoqueVendaItens(novosItens);
-    // 🔧 Marca a flag com o resultado REAL — evita mascarar falha silenciosa
-    // (mantém rastreabilidade e evita duplo desconto em mudarStatus('em_preparo'))
-    await supa
+
+    // ── INSERT: novo pedido de balcão ─────────────────────────────
+    const tipoEntregaPDV =
+      document.getElementById("balcao-tipo-entrega")?.value || "balcao";
+    const fretePDV =
+      tipoEntregaPDV === "delivery"
+        ? parseInt(document.getElementById("balcao-frete")?.value || "0") || 0
+        : 0;
+    const enderecoPDV =
+      tipoEntregaPDV === "delivery"
+        ? document.getElementById("balcao-endereco")?.value.trim() || "Delivery"
+        : mesa
+          ? `Mesa ${mesa}`
+          : _soKg
+            ? "Balcão - Venda Kg"
+            : "Balcão";
+
+    const _geoLat = document.getElementById("balcao-geo-lat")?.value || null;
+    const _geoLng = document.getElementById("balcao-geo-lng")?.value || null;
+
+    const subtotalLiquido = subtotalBruto - descontoAplicado;
+    const totalNovo = subtotalLiquido + fretePDV;
+    const _agora = new Date().toISOString();
+    // ── Lógica de status inicial ───────────────────────────────────
+    // PDV delivery: precisa passar por preparo → em_preparo (ou pronto se todos sem cozinha)
+    // PDV balcão / mesa / retirada: cliente já comprou e saiu → entregue direto
+    const _isPdvDelivery = tipoEntregaPDV === "delivery";
+    const _statusInicial = _isPdvDelivery
+      ? _todosSemCozinha(carrinhoPDV)
+        ? "pronto_entrega"
+        : "em_preparo"
+      : "entregue"; // balcão/mesa/retirada: venda concluída na hora
+
+    // Timestamps: delivery recebe só os tempos iniciais; balcão fecha todos de uma vez
+    const _tsDelivery = _isPdvDelivery
+      ? {}
+      : {
+          tempo_pronto: _agora,
+          tempo_entregue: _agora,
+        };
+
+    // ── Chave de idempotência do PDV ────────────────────────────────────
+    // Protege contra inserts duplicados quando o operador clica várias vezes
+    // (rede lenta, F5 no meio do envio, etc). Hash determinístico do carrinho
+    // + cliente + minuto atual: se o MESMO carrinho for enviado de novo dentro
+    // da mesma janela de 1 minuto, o backend recusa o segundo insert.
+    const _hashCarrinhoPDV = novosItens
+      .map((i) => `${i.id}-${i.qtd}-${i.preco}`)
+      .sort()
+      .join("|");
+    const _pdvIdempKey = `pdv-${_hashCarrinhoPDV}-${tel || cli}-${Math.floor(Date.now() / 60000)}`;
+
+    // Verifica no banco se já existe um pedido idêntico nos últimos 60s
+    const { data: _pedidoExistente } = await supa
       .from("pedidos")
-      .update({ estoque_descontado: _resDescMesa.ok })
-      .eq("id", window._mesaAbertaId);
-    await _alertarFalhaEstoque(_resDescMesa, `Mesa — Pedido #${window._mesaAbertaId}`);
+      .select("id")
+      .eq("idempotency_key", _pdvIdempKey)
+      .maybeSingle();
 
-    // Reset
-    window._mesaAbertaId = null;
-    window._mesaAbertaTotal = 0;
-    window._mesaAbertaPedido = null;
-    carrinhoPDV = [];
-    document.getElementById("balcao-cliente").value = "";
-    document.getElementById("balcao-mesa").value = "";
-    document.getElementById("balcao-telefone").value = "";
-    document.querySelector(".pdv-mesa-aviso")?.remove();
-    atualizarCarrinhoPDV();
-    atualizarBarraMesasAtivas();
-    carregarMonitorMesas();
-    alert(`✅ ${novosItens.length} item(s) enviado(s) para separação!`);
-    return;
-  }
-
-  // ── INSERT: novo pedido de balcão ─────────────────────────────
-  const tipoEntregaPDV =
-    document.getElementById("balcao-tipo-entrega")?.value || "balcao";
-  const fretePDV =
-    tipoEntregaPDV === "delivery"
-      ? parseInt(document.getElementById("balcao-frete")?.value || "0") || 0
-      : 0;
-  const enderecoPDV =
-    tipoEntregaPDV === "delivery"
-      ? document.getElementById("balcao-endereco")?.value.trim() || "Delivery"
-      : mesa
-        ? `Mesa ${mesa}`
-        : _soKg
-          ? "Balcão - Venda Kg"
-          : "Balcão";
-
-  const _geoLat = document.getElementById("balcao-geo-lat")?.value || null;
-  const _geoLng = document.getElementById("balcao-geo-lng")?.value || null;
-
-  const subtotalLiquido = subtotalBruto - descontoAplicado;
-  const totalNovo = subtotalLiquido + fretePDV;
-  const _agora = new Date().toISOString();
-  // ── Lógica de status inicial ───────────────────────────────────
-  // PDV delivery: precisa passar por preparo → em_preparo (ou pronto se todos sem cozinha)
-  // PDV balcão / mesa / retirada: cliente já comprou e saiu → entregue direto
-  const _isPdvDelivery = tipoEntregaPDV === "delivery";
-  const _statusInicial = _isPdvDelivery
-    ? (_todosSemCozinha(carrinhoPDV) ? "pronto_entrega" : "em_preparo")
-    : "entregue"; // balcão/mesa/retirada: venda concluída na hora
-
-  // Timestamps: delivery recebe só os tempos iniciais; balcão fecha todos de uma vez
-  const _tsDelivery = _isPdvDelivery ? {} : {
-    tempo_pronto:    _agora,
-    tempo_entregue:  _agora,
-  };
-
-  // ── Chave de idempotência do PDV ────────────────────────────────────
-  // Protege contra inserts duplicados quando o operador clica várias vezes
-  // (rede lenta, F5 no meio do envio, etc). Hash determinístico do carrinho
-  // + cliente + minuto atual: se o MESMO carrinho for enviado de novo dentro
-  // da mesma janela de 1 minuto, o backend recusa o segundo insert.
-  const _hashCarrinhoPDV = novosItens
-    .map((i) => `${i.id}-${i.qtd}-${i.preco}`)
-    .sort()
-    .join("|");
-  const _pdvIdempKey = `pdv-${_hashCarrinhoPDV}-${tel || cli}-${Math.floor(Date.now() / 60000)}`;
-
-  // Verifica no banco se já existe um pedido idêntico nos últimos 60s
-  const { data: _pedidoExistente } = await supa
-    .from("pedidos")
-    .select("id")
-    .eq("idempotency_key", _pdvIdempKey)
-    .maybeSingle();
-
-  if (_pedidoExistente) {
-    console.warn(`[PDV] Envio duplicado bloqueado — pedido já existe: #${_pedidoExistente.id}`);
-    alert(`⚠️ Esta venda já foi registrada (Pedido #${_pedidoExistente.id}). Evite clicar várias vezes.`);
-    carrinhoPDV = [];
-    atualizarCarrinhoPDV();
-    return;
-  }
-
-  const pedido = {
-    uid_temporal: `BALC-${Math.floor(Math.random() * 1000)}`,
-    idempotency_key: _pdvIdempKey,
-    status: _soKg ? "entregue" : _statusInicial,
-    tipo_entrega: tipoEntregaPDV,
-    subtotal: subtotalBruto,
-    desconto_pdv_valor: descontoAplicado,
-    desconto_pdv_tipo: descontoAplicado > 0 ? descTipo : null,
-    frete_cobrado_cliente: fretePDV,
-    total_geral: totalNovo,
-    forma_pagamento: pag,
-    itens: novosItens,
-    endereco_entrega: enderecoPDV,
-    cliente_nome: nomeFinal,
-    cliente_telefone: tel,
-    obs_pagamento: obsPagPDV,
-    garcom_id: _perfilId || null,
-    garcom_nome: _perfilNome || null,
-    ...(tipoEntregaPDV === "delivery" && _geoLat && _geoLng
-      ? { geo_lat: _geoLat, geo_lng: _geoLng }
-      : {}),
-    tempo_recebido:          _agora,
-    tempo_confirmado:        _agora,
-    tempo_preparo_iniciado:  _isPdvDelivery ? _agora : null,
-    ..._tsDelivery,
-    ...(_soKg ? { tempo_pronto: _agora, tempo_entregue: _agora } : {}),
-    // 🔧 CORREÇÃO: NÃO marcar como descontado aqui. O valor real só é
-    // conhecido depois que _descontarEstoqueVenda() roda e confirma (ou não)
-    // cada UPDATE. Gravar `true` antes de tentar mascarava falhas silenciosas
-    // pra sempre — o pedido "mentia" ter descontado mesmo quando não tinha.
-    estoque_descontado: false,
-  };
-
-  const { data: novoPedido, error } = await supa
-    .from("pedidos")
-    .insert([pedido])
-    .select("id")
-    .single();
-  if (error) {
-    // Se o erro for de chave duplicada (unique constraint), é uma tentativa
-    // de duplo-envio que passou pela checagem acima por race condition —
-    // trata como sucesso silencioso em vez de erro confuso pro operador.
-    if (error.code === "23505" || /duplicate key/i.test(error.message || "")) {
-      alert("⚠️ Esta venda já estava sendo processada. Verifique a lista de pedidos antes de tentar novamente.");
+    if (_pedidoExistente) {
+      console.warn(
+        `[PDV] Envio duplicado bloqueado — pedido já existe: #${_pedidoExistente.id}`,
+      );
+      alert(
+        `⚠️ Esta venda já foi registrada (Pedido #${_pedidoExistente.id}). Evite clicar várias vezes.`,
+      );
       carrinhoPDV = [];
       atualizarCarrinhoPDV();
       return;
     }
-    alert("Erro: " + error.message);
-    return;
-  }
-  // Descontar estoque imediatamente (PDV não passa por mudarStatus)
-  if (novoPedido?.id) {
-    const _resDescPdv = await _descontarEstoqueVenda(novoPedido.id, novosItens);
-    // 🔧 Só grava `estoque_descontado: true` se realmente confirmou sucesso
-    // em TODOS os itens. Se falhou parcialmente, mantém false — assim um
-    // cancelamento futuro sabe que precisa repor (ou não), sem mentira gravada.
-    await supa
+
+    const pedido = {
+      uid_temporal: `BALC-${Math.floor(Math.random() * 1000)}`,
+      idempotency_key: _pdvIdempKey,
+      status: _soKg ? "entregue" : _statusInicial,
+      tipo_entrega: tipoEntregaPDV,
+      subtotal: subtotalBruto,
+      desconto_pdv_valor: descontoAplicado,
+      desconto_pdv_tipo: descontoAplicado > 0 ? descTipo : null,
+      frete_cobrado_cliente: fretePDV,
+      total_geral: totalNovo,
+      forma_pagamento: pag,
+      itens: novosItens,
+      endereco_entrega: enderecoPDV,
+      cliente_nome: nomeFinal,
+      cliente_telefone: tel,
+      obs_pagamento: obsPagPDV,
+      garcom_id: _perfilId || null,
+      garcom_nome: _perfilNome || null,
+      ...(tipoEntregaPDV === "delivery" && _geoLat && _geoLng
+        ? { geo_lat: _geoLat, geo_lng: _geoLng }
+        : {}),
+      tempo_recebido: _agora,
+      tempo_confirmado: _agora,
+      tempo_preparo_iniciado: _isPdvDelivery ? _agora : null,
+      ..._tsDelivery,
+      ...(_soKg ? { tempo_pronto: _agora, tempo_entregue: _agora } : {}),
+      // 🔧 CORREÇÃO: NÃO marcar como descontado aqui. O valor real só é
+      // conhecido depois que _descontarEstoqueVenda() roda e confirma (ou não)
+      // cada UPDATE. Gravar `true` antes de tentar mascarava falhas silenciosas
+      // pra sempre — o pedido "mentia" ter descontado mesmo quando não tinha.
+      estoque_descontado: false,
+    };
+
+    const { data: novoPedido, error } = await supa
       .from("pedidos")
-      .update({ estoque_descontado: _resDescPdv.ok })
-      .eq("id", novoPedido.id);
-    await _alertarFalhaEstoque(_resDescPdv, `Balcão — Pedido #${novoPedido.id}`);
-  }
-
-  if (_pdvCashbackUsando && tel) {
-    const descCash = pdvGetCashbackDesconto(totalNovo);
-    if (descCash > 0 && typeof crmUsarCashback === "function") {
-      await crmUsarCashback(tel, descCash);
+      .insert([pedido])
+      .select("id")
+      .single();
+    if (error) {
+      // Se o erro for de chave duplicada (unique constraint), é uma tentativa
+      // de duplo-envio que passou pela checagem acima por race condition —
+      // trata como sucesso silencioso em vez de erro confuso pro operador.
+      if (
+        error.code === "23505" ||
+        /duplicate key/i.test(error.message || "")
+      ) {
+        alert(
+          "⚠️ Esta venda já estava sendo processada. Verifique a lista de pedidos antes de tentar novamente.",
+        );
+        carrinhoPDV = [];
+        atualizarCarrinhoPDV();
+        return;
+      }
+      alert("Erro: " + error.message);
+      return;
     }
-    _pdvCashbackUsando = false;
-    _pdvCashbackDisponivel = 0;
-    const _cbBox = document.getElementById("pdv-cashback-box");
-    if (_cbBox) _cbBox.style.display = "none";
-  }
+    // Descontar estoque imediatamente (PDV não passa por mudarStatus)
+    if (novoPedido?.id) {
+      const _resDescPdv = await _descontarEstoqueVenda(
+        novoPedido.id,
+        novosItens,
+      );
+      // 🔧 Só grava `estoque_descontado: true` se realmente confirmou sucesso
+      // em TODOS os itens. Se falhou parcialmente, mantém false — assim um
+      // cancelamento futuro sabe que precisa repor (ou não), sem mentira gravada.
+      await supa
+        .from("pedidos")
+        .update({ estoque_descontado: _resDescPdv.ok })
+        .eq("id", novoPedido.id);
+      await _alertarFalhaEstoque(
+        _resDescPdv,
+        `Balcão — Pedido #${novoPedido.id}`,
+      );
+    }
 
-  if (tel && typeof crmGerarCashback === "function") {
-    await crmGerarCashback(tel, totalNovo, novoPedido?.id || null);
-  }
+    if (_pdvCashbackUsando && tel) {
+      const descCash = pdvGetCashbackDesconto(totalNovo);
+      if (descCash > 0 && typeof crmUsarCashback === "function") {
+        await crmUsarCashback(tel, descCash);
+      }
+      _pdvCashbackUsando = false;
+      _pdvCashbackDisponivel = 0;
+      const _cbBox = document.getElementById("pdv-cashback-box");
+      if (_cbBox) _cbBox.style.display = "none";
+    }
+
+    if (tel && typeof crmGerarCashback === "function") {
+      await crmGerarCashback(tel, totalNovo, novoPedido?.id || null);
+    }
 
     // ── Impressão do comprovante (pergunta, automático ou silencioso) ──
-  if (novoPedido?.id) {
-    const dadosImpressao = _pdvGerarDadosImpressao({
-      pedidoId: novoPedido.id,
-      clienteNome: nomeFinal,
-      clienteTel: tel,
-      entregaRef: pedido.endereco_entrega,
-      itens: novosItens,
-      subtotalBruto,
-      descontoAplicado,
-      fretePDV,
-      totalNovo,
-      formaPagamento: pag,
-      obsPagamento: obsPagPDV,
-    });
-    _pdvPerguntarImpressao(dadosImpressao);
-  }
+    if (novoPedido?.id) {
+      const dadosImpressao = _pdvGerarDadosImpressao({
+        pedidoId: novoPedido.id,
+        clienteNome: nomeFinal,
+        clienteTel: tel,
+        entregaRef: pedido.endereco_entrega,
+        itens: novosItens,
+        subtotalBruto,
+        descontoAplicado,
+        fretePDV,
+        totalNovo,
+        formaPagamento: pag,
+        obsPagamento: obsPagPDV,
+      });
+      _pdvPerguntarImpressao(dadosImpressao);
+    }
 
-  carrinhoPDV = [];
-  document.getElementById("balcao-cliente").value = "";
-  const mesaInput = document.getElementById("balcao-mesa");
-  if (mesaInput) mesaInput.value = "";
-  document.getElementById("balcao-telefone").value = "";
-  // Reset tipo entrega e campos de delivery
-  const tipoSelPDV = document.getElementById("balcao-tipo-entrega");
-  if (tipoSelPDV) tipoSelPDV.value = "balcao";
-  const endPDV = document.getElementById("balcao-endereco");
-  if (endPDV) endPDV.value = "";
-  const geoPDVLat = document.getElementById("balcao-geo-lat");
-  if (geoPDVLat) geoPDVLat.value = "";
-  const geoPDVLng = document.getElementById("balcao-geo-lng");
-  if (geoPDVLng) geoPDVLng.value = "";
-  const fretePDVInput = document.getElementById("balcao-frete");
-  if (fretePDVInput) fretePDVInput.value = "";
-  const freteMsgPDV = document.getElementById("frete-msg-pdv");
-  if (freteMsgPDV) freteMsgPDV.innerHTML = "";
-  const deliveryRowPDV = document.getElementById("pdv-delivery-row");
-  if (deliveryRowPDV) deliveryRowPDV.style.display = "none";
-  // Reset visual do toggle delivery
-  const toggleDelivEl = document.getElementById("pdv-toggle-delivery");
-  if (toggleDelivEl) toggleDelivEl.classList.remove("active");
-  const chipEl = document.getElementById("pdv-tipo-chip");
-  if (chipEl) chipEl.textContent = "🏪 Balcão";
-  const descValEl = document.getElementById("pdv-desconto-val");
-  if (descValEl) descValEl.value = "";
-  const descTipoEl = document.getElementById("pdv-desconto-tipo");
-  if (descTipoEl) descTipoEl.value = "fixo";
-  // Reset recebido / troco
-  const recebidoEl = document.getElementById("pdv-recebido");
-  if (recebidoEl) recebidoEl.value = "";
-  const trocoEl = document.getElementById("pdv-troco-val");
-  if (trocoEl) trocoEl.textContent = "0";
-  // Reset cashback
-  _pdvCashbackDisponivel = 0;
-  _pdvCashbackUsando = false;
-  const cashBox = document.getElementById("pdv-cashback-box");
-  if (cashBox) cashBox.style.display = "none";
-  // Reset multipagamento PDV
-  const multiPartesPDV = document.getElementById("multi-partes-pdv");
-  if (multiPartesPDV) multiPartesPDV.innerHTML = "";
-  _multiContadorPDV = 0;
-  document.getElementById("balcao-pag").value = "Efetivo";
-  document.getElementById("balcao-pag").style.display = "";
-  const boxMultiPDV = document.getElementById("box-multi-pdv");
-  if (boxMultiPDV) boxMultiPDV.style.display = "none";
-  atualizarCarrinhoPDV();
-  atualizarBarraMesasAtivas();
-  carregarMonitorMesas();
-  // Toast não-bloqueante (alert segurava o popup de impressão)
-  const _msgFinal = _soKg
-    ? "✅ Venda registrada!"
-    : _todosBebidas(novosItens)
-      ? "✅ Só bebidas — direto ao balcão."
-      : "✅ Enviado para separação!";
-  _pdvToast(_msgFinal);
-
+    carrinhoPDV = [];
+    document.getElementById("balcao-cliente").value = "";
+    const mesaInput = document.getElementById("balcao-mesa");
+    if (mesaInput) mesaInput.value = "";
+    document.getElementById("balcao-telefone").value = "";
+    // Reset tipo entrega e campos de delivery
+    const tipoSelPDV = document.getElementById("balcao-tipo-entrega");
+    if (tipoSelPDV) tipoSelPDV.value = "balcao";
+    const endPDV = document.getElementById("balcao-endereco");
+    if (endPDV) endPDV.value = "";
+    const geoPDVLat = document.getElementById("balcao-geo-lat");
+    if (geoPDVLat) geoPDVLat.value = "";
+    const geoPDVLng = document.getElementById("balcao-geo-lng");
+    if (geoPDVLng) geoPDVLng.value = "";
+    const fretePDVInput = document.getElementById("balcao-frete");
+    if (fretePDVInput) fretePDVInput.value = "";
+    const freteMsgPDV = document.getElementById("frete-msg-pdv");
+    if (freteMsgPDV) freteMsgPDV.innerHTML = "";
+    const deliveryRowPDV = document.getElementById("pdv-delivery-row");
+    if (deliveryRowPDV) deliveryRowPDV.style.display = "none";
+    // Reset visual do toggle delivery
+    const toggleDelivEl = document.getElementById("pdv-toggle-delivery");
+    if (toggleDelivEl) toggleDelivEl.classList.remove("active");
+    const chipEl = document.getElementById("pdv-tipo-chip");
+    if (chipEl) chipEl.textContent = "🏪 Balcão";
+    const descValEl = document.getElementById("pdv-desconto-val");
+    if (descValEl) descValEl.value = "";
+    const descTipoEl = document.getElementById("pdv-desconto-tipo");
+    if (descTipoEl) descTipoEl.value = "fixo";
+    // Reset recebido / troco
+    const recebidoEl = document.getElementById("pdv-recebido");
+    if (recebidoEl) recebidoEl.value = "";
+    const trocoEl = document.getElementById("pdv-troco-val");
+    if (trocoEl) trocoEl.textContent = "0";
+    // Reset cashback
+    _pdvCashbackDisponivel = 0;
+    _pdvCashbackUsando = false;
+    const cashBox = document.getElementById("pdv-cashback-box");
+    if (cashBox) cashBox.style.display = "none";
+    // Reset multipagamento PDV
+    const multiPartesPDV = document.getElementById("multi-partes-pdv");
+    if (multiPartesPDV) multiPartesPDV.innerHTML = "";
+    _multiContadorPDV = 0;
+    document.getElementById("balcao-pag").value = "Efetivo";
+    document.getElementById("balcao-pag").style.display = "";
+    const boxMultiPDV = document.getElementById("box-multi-pdv");
+    if (boxMultiPDV) boxMultiPDV.style.display = "none";
+    atualizarCarrinhoPDV();
+    atualizarBarraMesasAtivas();
+    carregarMonitorMesas();
+    // Toast não-bloqueante (alert segurava o popup de impressão)
+    const _msgFinal = _soKg
+      ? "✅ Venda registrada!"
+      : _todosBebidas(novosItens)
+        ? "✅ Só bebidas — direto ao balcão."
+        : "✅ Enviado para separação!";
+    _pdvToast(_msgFinal);
   } finally {
     clearTimeout(_timerPDV);
     _liberarPDV();
@@ -13446,7 +14307,10 @@ async function finalizarMesa(id) {
         .from("pedidos")
         .update({ estoque_descontado: _resDescFinal.ok })
         .eq("id", id);
-      await _alertarFalhaEstoque(_resDescFinal, `Mesa finalizada — Pedido #${id}`);
+      await _alertarFalhaEstoque(
+        _resDescFinal,
+        `Mesa finalizada — Pedido #${id}`,
+      );
     }
 
     carregarMonitorMesas();
@@ -13496,57 +14360,62 @@ document.addEventListener("keydown", function (event) {
 // =========================================
 async function carregarEquipe() {
   const { data } = await supa.from("perfis_acesso").select("*").order("cargo");
-
   const tbody = document.getElementById("lista-equipe");
   if (!tbody) return;
 
   tbody.innerHTML = "";
-  if (data) {
+
+  if (data && data.length > 0) {
+    const cargoBadges = {
+      adminMaster: "🎮 Admin Master",
+      dono: "🔑 Dono",
+      gerente: "👔 Gerente",
+      socio: "🤝 Sócio", // <-- ADICIONADO AQUI
+      funcionario: "👷 Funcionário",
+      garcom: "🍽️ Garçom",
+    };
+
     data.forEach((u) => {
       const dataCriacao = u.created_at
         ? new Date(u.created_at).toLocaleDateString("pt-BR")
         : "-";
-      const ehDono = u.cargo === "dono";
-      const ehGerente = u.cargo === "gerente";
-      const ehFuncionario = u.cargo === "funcionario";
-      const ehGarcom = u.cargo === "garcom";
-      const ehAM = u.cargo === "adminMaster";
+      const isMe = u.id === _perfilId;
+      const isAM = u.cargo === "adminMaster";
+      const isDono = u.cargo === "dono";
 
-      // Botão de promoção/rebaixamento
+      // Botões de ação
       let acaoCargo = "";
       if (
-        !ehAM &&
+        !isAM &&
         (perfilUsuario === "dono" || perfilUsuario === "adminMaster")
       ) {
-        if (ehFuncionario || ehGarcom) {
+        if (
+          u.cargo === "funcionario" ||
+          u.cargo === "garcom" ||
+          u.cargo === "socio"
+        ) {
           acaoCargo = `<button class="btn btn-sm btn-success" onclick="promoverUsuario('${u.id}', 'gerente')" title="Promover a Gerente"><i class="fas fa-arrow-up"></i> Gerente</button>`;
-        } else if (ehGerente) {
+        } else if (u.cargo === "gerente") {
           acaoCargo = `<button class="btn btn-sm btn-warning" onclick="promoverUsuario('${u.id}', 'funcionario')" title="Rebaixar a Funcionário"><i class="fas fa-arrow-down"></i> Funcionário</button>`;
         }
-        if (perfilUsuario === "adminMaster" && !ehDono) {
+
+        if (perfilUsuario === "adminMaster" && !isDono) {
           acaoCargo += ` <button class="btn btn-sm btn-primary" onclick="promoverUsuario('${u.id}', 'dono')" title="Tornar Dono"><i class="fas fa-crown"></i> Dono</button>`;
         }
-        if (!ehDono) {
+
+        // Não deixa excluir a si mesmo nem o dono principal
+        if (!isDono && !isMe) {
           acaoCargo += ` <button class="btn btn-sm btn-danger" onclick="excluirUsuario('${u.id}', '${u.email}')" title="Excluir"><i class="fas fa-trash"></i></button>`;
         }
       }
 
-      const cargoBadge = ehAM
-        ? "🎮 Admin Master"
-        : ehDono
-          ? "🔑 Dono"
-          : ehGerente
-            ? "👔 Gerente"
-            : ehGarcom
-              ? "🍽️ Garçom"
-              : "👷 Funcionário";
       tbody.innerHTML += `<tr>
-                <td><strong>${u.nome_display || "—"}</strong></td>
-                <td>${u.email}</td>
-                <td>${cargoBadge}</td>
-                <td>${dataCriacao}</td>
-                <td>${acaoCargo}</td>
-            </tr>`;
+        <td><strong>${u.nome_display || "—"}</strong></td>
+        <td>${u.email}</td>
+        <td>${cargoBadges[u.cargo] || u.cargo}</td>
+        <td>${dataCriacao}</td>
+        <td>${acaoCargo || '<span style="color:#aaa">—</span>'}</td>
+      </tr>`;
     });
   }
 }
@@ -13680,6 +14549,8 @@ async function amCarregarUsuarios() {
     dono: '<span style="background:#f39c12;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.75rem">🔑 Dono</span>',
     gerente:
       '<span style="background:#2980b9;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.75rem">👔 Gerente</span>',
+    socio:
+      '<span style="background:#8e44ad;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.75rem">🤝 Sócio</span>',
     funcionario:
       '<span style="background:#7f8c8d;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.75rem">👷 Funcionário</span>',
     garcom:
@@ -13690,25 +14561,18 @@ async function amCarregarUsuarios() {
     .map((u) => {
       const isMe = u.id === _perfilId;
       const isAM = u.cargo === "adminMaster";
-      const opcoesCargo = ["dono", "gerente", "funcionario", "garcom"]
+
+      const opcoesCargo = ["dono", "gerente", "socio", "funcionario", "garcom"]
         .map(
           (c) =>
             `<option value="${c}" ${u.cargo === c ? "selected" : ""}>${c}</option>`,
         )
         .join("");
-            const btnPermissoes = u.cargo === "socio"
-        ? `<button onclick="amAbrirModalPermissoes('${u.id}','${u.email.replace(/'/g, "\\'")}')"
-            style="background:#8e44ad;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.8rem;margin-right:6px"
-            title="Editar abas visíveis">
-            🔐 Permissões
-          </button>`
-        : "";
 
       const acoes =
         isMe || isAM
           ? '<span style="color:#aaa;font-size:0.78rem">—</span>'
           : `
-      ${btnPermissoes}
       <select onchange="amAlterarCargo('${u.id}', this.value)" style="padding:4px 8px;border-radius:6px;border:1px solid #ddd;font-size:0.8rem;margin-right:6px">
         ${opcoesCargo}
       </select>
@@ -13716,6 +14580,7 @@ async function amCarregarUsuarios() {
         style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.8rem">
         <i class="fas fa-trash"></i>
       </button>`;
+
       return `<tr>
       <td><strong>${u.nome_display || "—"}</strong>${isMe ? ' <span style="font-size:0.7rem;color:#27ae60">(você)</span>' : ""}</td>
       <td style="font-size:0.85rem">${u.email}</td>
@@ -13749,136 +14614,36 @@ async function amAlterarCargo(id, novoCargo) {
 //  perfis_acesso.permissoes_customizadas = { abas: [...] }
 // ─────────────────────────────────────────────────────────────
 const _ABAS_DISPONIVEIS = [
-  { key: "dashboard",     label: "📊 Visão Geral" },
-  { key: "pdv",           label: "🏪 PDV Mostrador" },
-  { key: "pedidos",       label: "📋 Pedidos" },
-  { key: "cozinha",       label: "🍳 Separação" },
-  { key: "equipe",        label: "👥 Equipe" },
-  { key: "produtos",      label: "🍽️ Produtos" },
-  { key: "categorias",    label: "🏷️ Categorias" },
-  { key: "motoboys",      label: "🏍️ Motoboys" },
-  { key: "financeiro",    label: "💰 Financeiro" },
-  { key: "inventario",    label: "📦 Inventário" },
+  { key: "dashboard", label: "📊 Visão Geral" },
+  { key: "pdv", label: "🏪 PDV Mostrador" },
+  { key: "pedidos", label: "📋 Pedidos" },
+  { key: "cozinha", label: "🍳 Separação" },
+  { key: "equipe", label: "👥 Equipe" },
+  { key: "produtos", label: "🍽️ Produtos" },
+  { key: "categorias", label: "🏷️ Categorias" },
+  { key: "motoboys", label: "🏍️ Motoboys" },
+  { key: "financeiro", label: "💰 Financeiro" },
+  { key: "inventario", label: "📦 Inventário" },
   { key: "configuracoes", label: "⚙️ Configurações" },
-  { key: "estatisticas",  label: "📈 Estatísticas" },
+  { key: "estatisticas", label: "📈 Estatísticas" },
   { key: "ficha-tecnica", label: "🧮 Ficha Técnica" },
-  { key: "crm",           label: "👥 CRM Clientes" },
-  { key: "mensalistas",   label: "📆 Mensalistas" },
-  { key: "filiais",       label: "🏬 Filiais" },
+  { key: "crm", label: "👥 CRM Clientes" },
+  { key: "mensalistas", label: "📆 Mensalistas" },
+  { key: "filiais", label: "🏬 Filiais" },
 ];
-
-async function amAbrirModalPermissoes(userId, userEmail) {
-  if (perfilUsuario !== "adminMaster") return;
-
-  // Busca permissões atuais
-  const { data, error } = await supa
-    .from("perfis_acesso")
-    .select("permissoes_customizadas, nome_display")
-    .eq("id", userId)
-    .single();
-
-  if (error || !data) {
-    alert("Erro ao carregar permissões: " + (error?.message || "usuário não encontrado"));
-    return;
-  }
-
-  const atuais = data.permissoes_customizadas?.abas || [];
-  const nomeExibir = data.nome_display || userEmail;
-
-  document.getElementById("_modal-perm-socio")?.remove();
-
-  const overlay = document.createElement("div");
-  overlay.id = "_modal-perm-socio";
-  overlay.style.cssText = [
-    "position:fixed","inset:0","background:rgba(0,0,0,0.6)",
-    "z-index:99999","display:flex","align-items:center",
-    "justify-content:center","padding:16px","overflow-y:auto",
-  ].join(";");
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:18px;max-width:560px;width:100%;
-                max-height:92vh;overflow:hidden;display:flex;flex-direction:column;
-                box-shadow:0 24px 80px rgba(0,0,0,0.4)">
-      <div style="background:linear-gradient(135deg,#1e40af,#1e3a8a);color:#fff;
-                  padding:20px 24px;flex-shrink:0">
-        <div style="font-size:1.15rem;font-weight:800">🔐 Permissões do Sócio</div>
-        <div style="font-size:0.82rem;opacity:0.9;margin-top:4px">
-          <b>${nomeExibir}</b> — marque as abas que ele pode ver
-        </div>
-      </div>
-
-      <div style="padding:20px 24px;overflow-y:auto;flex:1">
-        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-          <button type="button" onclick="_permMarcarTodas(true)"
-            style="padding:6px 14px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;
-                   border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">
-            ✓ Marcar todas
-          </button>
-          <button type="button" onclick="_permMarcarTodas(false)"
-            style="padding:6px 14px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;
-                   border-radius:8px;font-weight:700;font-size:0.78rem;cursor:pointer">
-            ✗ Limpar todas
-          </button>
-        </div>
-
-        <div id="_perm-checkboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          ${_ABAS_DISPONIVEIS.map((a) => `
-            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;
-                          background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;
-                          cursor:pointer;font-size:0.85rem;font-weight:600;color:#334155;
-                          transition:all .15s"
-              onmouseover="this.style.borderColor='#8e44ad'"
-              onmouseout="this.style.borderColor='#e2e8f0'">
-              <input type="checkbox" class="_perm-chk" value="${a.key}"
-                ${atuais.includes(a.key) ? "checked" : ""}
-                style="width:17px;height:17px;accent-color:#8e44ad;flex-shrink:0">
-              ${a.label}
-            </label>
-          `).join("")}
-        </div>
-
-        <div style="margin-top:18px;padding:12px 14px;background:#fffbeb;
-                    border:1px solid #fcd34d;border-radius:10px;font-size:0.78rem;color:#92400e">
-          ⚠️ <b>Admin Master</b> e <b>Assinatura</b> são sempre exclusivos do adminMaster —
-          mesmo que você marque, o Sócio não verá essas abas.
-        </div>
-      </div>
-
-      <div style="padding:16px 24px;border-top:1px solid #f0f0f0;background:#fafafa;
-                  display:flex;gap:10px;flex-shrink:0">
-        <button type="button" onclick="document.getElementById('_modal-perm-socio').remove()"
-          style="flex:1;padding:12px;background:#fff;color:#64748b;border:1.5px solid #e2e8f0;
-                 border-radius:10px;font-weight:700;font-size:0.88rem;cursor:pointer">
-          Cancelar
-        </button>
-        <button type="button" id="_perm-btn-salvar"
-          onclick="amSalvarPermissoes('${userId}')"
-          style="flex:2;padding:12px;background:linear-gradient(135deg,#8e44ad,#6b21a8);
-                 color:#fff;border:none;border-radius:10px;font-weight:800;font-size:0.9rem;
-                 cursor:pointer;box-shadow:0 4px 14px rgba(142,68,173,0.35)">
-          ✅ Salvar Permissões
-        </button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-
-  // Helper para "marcar/desmarcar todas"
-  window._permMarcarTodas = (valor) => {
-    document.querySelectorAll("._perm-chk").forEach((c) => (c.checked = valor));
-  };
-}
 
 async function amSalvarPermissoes(userId) {
   if (perfilUsuario !== "adminMaster") return;
 
-  const marcados = Array.from(document.querySelectorAll("._perm-chk:checked"))
-    .map((c) => c.value);
+  const marcados = Array.from(
+    document.querySelectorAll("._perm-chk:checked"),
+  ).map((c) => c.value);
 
   const btn = document.getElementById("_perm-btn-salvar");
-  if (btn) { btn.disabled = true; btn.textContent = "⏳ Salvando..."; }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Salvando...";
+  }
 
   const { error } = await supa
     .from("perfis_acesso")
@@ -13887,7 +14652,10 @@ async function amSalvarPermissoes(userId) {
 
   if (error) {
     alert("❌ Erro ao salvar: " + error.message);
-    if (btn) { btn.disabled = false; btn.textContent = "✅ Salvar Permissões"; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "✅ Salvar Permissões";
+    }
     return;
   }
 
@@ -13897,15 +14665,22 @@ async function amSalvarPermissoes(userId) {
   const toast = document.createElement("div");
   toast.textContent = `✅ ${marcados.length} aba(s) liberada(s)`;
   toast.style.cssText = [
-    "position:fixed","bottom:28px","left:50%","transform:translateX(-50%)",
-    "background:#16a34a","color:#fff","padding:12px 24px","border-radius:12px",
-    "font-weight:700","font-size:0.9rem","z-index:99999",
+    "position:fixed",
+    "bottom:28px",
+    "left:50%",
+    "transform:translateX(-50%)",
+    "background:#16a34a",
+    "color:#fff",
+    "padding:12px 24px",
+    "border-radius:12px",
+    "font-weight:700",
+    "font-size:0.9rem",
+    "z-index:99999",
     "box-shadow:0 8px 24px rgba(0,0,0,0.2)",
   ].join(";");
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
 }
-
 
 async function amExcluirUsuario(id, email) {
   if (perfilUsuario !== "adminMaster") return;
@@ -15495,7 +16270,8 @@ async function _alertarFalhaEstoque(resultado, contexto) {
     if (_sessErr) {
       _sessaoInfo = `erro ao obter sessão: ${_sessErr.message}`;
     } else if (!_sess?.session) {
-      _sessaoInfo = "SEM SESSÃO ATIVA (usuário não autenticado / token expirado) — provável causa da falha";
+      _sessaoInfo =
+        "SEM SESSÃO ATIVA (usuário não autenticado / token expirado) — provável causa da falha";
     } else {
       const exp = _sess.session.expires_at
         ? new Date(_sess.session.expires_at * 1000).toLocaleString("pt-BR")
@@ -15506,13 +16282,18 @@ async function _alertarFalhaEstoque(resultado, contexto) {
     _sessaoInfo = `exceção ao checar sessão: ${e.message}`;
   }
 
-  console.error(`❌ [Estoque] Falha em "${contexto}":`, resultado.falhas, "| Sessão:", _sessaoInfo);
+  console.error(
+    `❌ [Estoque] Falha em "${contexto}":`,
+    resultado.falhas,
+    "| Sessão:",
+    _sessaoInfo,
+  );
   alert(
     `⚠️ ATENÇÃO: o pedido foi salvo, mas o estoque NÃO foi atualizado corretamente ` +
-    `para ${resultado.falhas.length} item(ns):\n\n${linhas}\n\n` +
-    `Diagnóstico da sessão: ${_sessaoInfo}\n\n` +
-    `Ajuste o estoque manualmente na tela de Produtos/Estoque. Se o diagnóstico acima ` +
-    `indicar sessão expirada, faça login novamente e avise o suporte técnico com este print.`,
+      `para ${resultado.falhas.length} item(ns):\n\n${linhas}\n\n` +
+      `Diagnóstico da sessão: ${_sessaoInfo}\n\n` +
+      `Ajuste o estoque manualmente na tela de Produtos/Estoque. Se o diagnóstico acima ` +
+      `indicar sessão expirada, faça login novamente e avise o suporte técnico com este print.`,
   );
 }
 
@@ -15555,14 +16336,14 @@ async function _descontarEstoqueVendaItens(itens) {
       ...new Set(
         itens
           .map((i) => Number(i.produto_id ?? i.id))
-          .filter((id) => Number.isInteger(id) && id > 0)
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
     const varIds = [
       ...new Set(
         itens
           .map((i) => Number(i.variacao_id))
-          .filter((id) => Number.isInteger(id) && id > 0)
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
 
@@ -15572,12 +16353,14 @@ async function _descontarEstoqueVendaItens(itens) {
     const [{ data: prods, error: errProds }, { data: variacoes }] =
       await Promise.all([
         prodIds.length
-          ? supa.from("produtos")
+          ? supa
+              .from("produtos")
               .select("id, nome, inventario_id, estoque_qtd")
               .in("id", prodIds)
           : Promise.resolve({ data: [] }),
         varIds.length
-          ? supa.from("produto_variacoes")
+          ? supa
+              .from("produto_variacoes")
               .select("id, produto_id, nome, estoque_qtd, controlar_estoque")
               .in("id", varIds)
           : Promise.resolve({ data: [] }),
@@ -15593,7 +16376,9 @@ async function _descontarEstoqueVendaItens(itens) {
 
     // ── 1. Desconto em variações ────────────────────────────────
     const mapaVariacoes = {};
-    (variacoes || []).forEach((v) => { mapaVariacoes[v.id] = v; });
+    (variacoes || []).forEach((v) => {
+      mapaVariacoes[v.id] = v;
+    });
 
     const qtdPorVariacao = {};
     itens.forEach((item) => {
@@ -15605,21 +16390,31 @@ async function _descontarEstoqueVendaItens(itens) {
     for (const [vid, qtd] of Object.entries(qtdPorVariacao)) {
       const v = mapaVariacoes[vid];
       if (!v) {
-        falhas.push({ tipo: "variacao", id: vid, motivo: "Variação não encontrada" });
+        falhas.push({
+          tipo: "variacao",
+          id: vid,
+          motivo: "Variação não encontrada",
+        });
         continue;
       }
       if (v.controlar_estoque === false) continue;
 
       const { data: fresh } = await supa
-        .from("produto_variacoes").select("estoque_qtd").eq("id", vid).single();
+        .from("produto_variacoes")
+        .select("estoque_qtd")
+        .eq("id", vid)
+        .single();
       const atual = fresh?.estoque_qtd ?? v.estoque_qtd ?? 0;
       const { data: _r, error: _e } = await supa
         .from("produto_variacoes")
         .update({ estoque_qtd: Math.max(0, atual - qtd) })
-        .eq("id", vid).select("id");
+        .eq("id", vid)
+        .select("id");
       if (_e || !_r?.length) {
         falhas.push({
-          tipo: "variacao", id: vid, nome: v.nome,
+          tipo: "variacao",
+          id: vid,
+          nome: v.nome,
           motivo: _e?.message || "0 linhas afetadas",
         });
       }
@@ -15627,9 +16422,11 @@ async function _descontarEstoqueVendaItens(itens) {
 
     // ── 2. Desconto em produtos SEM variação ────────────────────
     const prodsSemVar = (prods || []).filter(
-      (p) => !itens.some((i) =>
-        Number(i.produto_id ?? i.id) === p.id && Number(i.variacao_id) > 0,
-      ),
+      (p) =>
+        !itens.some(
+          (i) =>
+            Number(i.produto_id ?? i.id) === p.id && Number(i.variacao_id) > 0,
+        ),
     );
 
     const qtdPorProduto = {};
@@ -15652,25 +16449,39 @@ async function _descontarEstoqueVendaItens(itens) {
     if (Object.keys(descontosInv).length > 0) {
       const invIds = Object.keys(descontosInv).map(Number);
       const { data: estoques } = await supa
-        .from("inventario").select("id, quantidade").in("id", invIds);
+        .from("inventario")
+        .select("id, quantidade")
+        .in("id", invIds);
       for (const est of estoques || []) {
-        const nova = Math.max(0, Number(est.quantidade ?? 0) - descontosInv[est.id]);
+        const nova = Math.max(
+          0,
+          Number(est.quantidade ?? 0) - descontosInv[est.id],
+        );
         const { data: _rows, error: _err } = await supa
-          .from("inventario").update({ quantidade: nova })
-          .eq("id", est.id).select("id");
+          .from("inventario")
+          .update({ quantidade: nova })
+          .eq("id", est.id)
+          .select("id");
         if (_err || !_rows?.length) {
           falhas.push({
-            tipo: "inventario", id: est.id,
+            tipo: "inventario",
+            id: est.id,
             motivo: _err?.message || "0 linhas afetadas",
           });
         } else {
-          await supa.from("inventario_movimentos").insert([{
-            inventario_id: est.id,
-            tipo: "sub",
-            quantidade: descontosInv[est.id],
-            motivo: "Venda PDV (mesa — itens adicionados)",
-            usuario_email: "sistema",
-          }]).then(() => {}).catch(() => {});
+          await supa
+            .from("inventario_movimentos")
+            .insert([
+              {
+                inventario_id: est.id,
+                tipo: "sub",
+                quantidade: descontosInv[est.id],
+                motivo: "Venda PDV (mesa — itens adicionados)",
+                usuario_email: "sistema",
+              },
+            ])
+            .then(() => {})
+            .catch(() => {});
         }
       }
     }
@@ -15681,30 +16492,42 @@ async function _descontarEstoqueVendaItens(itens) {
       const qtdVendida = qtdPorProduto[prod.id];
       if (!qtdVendida) continue;
 
-      const { data: rpc, error: rpcErr } = await supa
-        .rpc("descontar_estoque_atomico", {
+      const { data: rpc, error: rpcErr } = await supa.rpc(
+        "descontar_estoque_atomico",
+        {
           p_produto_id: prod.id,
           p_qtd: qtdVendida,
-        });
+        },
+      );
 
       if (rpcErr) {
         const { data: fresh } = await supa
-          .from("produtos").select("estoque_qtd").eq("id", prod.id).single();
+          .from("produtos")
+          .select("estoque_qtd")
+          .eq("id", prod.id)
+          .single();
         const atual = fresh?.estoque_qtd ?? prod.estoque_qtd;
         const novaQtd = Math.max(0, atual - qtdVendida);
         const payload = { estoque_qtd: novaQtd };
         if (novaQtd === 0) payload.ativo = false;
         const { data: _r, error: _e } = await supa
-          .from("produtos").update(payload).eq("id", prod.id).select("id");
+          .from("produtos")
+          .update(payload)
+          .eq("id", prod.id)
+          .select("id");
         if (_e || !_r?.length) {
           falhas.push({
-            tipo: "produto", id: prod.id, nome: prod.nome,
+            tipo: "produto",
+            id: prod.id,
+            nome: prod.nome,
             motivo: _e?.message || "0 linhas afetadas",
           });
         }
       } else if (rpc && rpc[0] && !rpc[0].sucesso) {
         falhas.push({
-          tipo: "produto", id: prod.id, nome: prod.nome,
+          tipo: "produto",
+          id: prod.id,
+          nome: prod.nome,
           motivo: rpc[0].motivo || "RPC retornou sucesso=false",
         });
       }
@@ -15747,7 +16570,10 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
     let itens = itensDireto;
     if (!itens) {
       const { data: pedido } = await supa
-        .from("pedidos").select("itens").eq("id", pedidoId).single();
+        .from("pedidos")
+        .select("itens")
+        .eq("id", pedidoId)
+        .single();
       itens = pedido?.itens;
     }
     if (!itens?.length) return { ok: true, falhas };
@@ -15757,7 +16583,7 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
       ...new Set(
         itens
           .map((i) => Number(i.produto_id ?? i.id))
-          .filter((id) => Number.isInteger(id) && id > 0)
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
 
@@ -15766,24 +16592,28 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
       ...new Set(
         itens
           .map((i) => Number(i.variacao_id))
-          .filter((id) => Number.isInteger(id) && id > 0)
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
 
     if (!prodIds.length) return { ok: true, falhas };
 
     // 🔧 Busca produtos E variações em paralelo
-    const [{ data: prods, error: errProds }, { data: variacoes, error: errVars }] =
-      await Promise.all([
-        supa.from("produtos")
-          .select("id, nome, inventario_id, estoque_qtd")
-          .in("id", prodIds),
-        varIds.length
-          ? supa.from("produto_variacoes")
-              .select("id, produto_id, nome, estoque_qtd, controlar_estoque")
-              .in("id", varIds)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
+    const [
+      { data: prods, error: errProds },
+      { data: variacoes, error: errVars },
+    ] = await Promise.all([
+      supa
+        .from("produtos")
+        .select("id, nome, inventario_id, estoque_qtd")
+        .in("id", prodIds),
+      varIds.length
+        ? supa
+            .from("produto_variacoes")
+            .select("id, produto_id, nome, estoque_qtd, controlar_estoque")
+            .in("id", varIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
 
     if (errProds) {
       falhas.push({ tipo: "query_produtos", motivo: errProds.message });
@@ -15807,7 +16637,9 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
     //  e não toca no estoque_qtd do produto-pai (que costuma ser NULL).
     // ═══════════════════════════════════════════════════════════════
     const mapaVariacoes = {};
-    (variacoes || []).forEach((v) => { mapaVariacoes[v.id] = v; });
+    (variacoes || []).forEach((v) => {
+      mapaVariacoes[v.id] = v;
+    });
 
     // Mapa: variacao_id → qtd vendida
     const qtdPorVariacao = {};
@@ -15829,7 +16661,11 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
     for (const [vid, qtd] of Object.entries(qtdPorVariacao)) {
       const v = mapaVariacoes[vid];
       if (!v) {
-        falhas.push({ tipo: "variacao", id: vid, motivo: "Variação não encontrada" });
+        falhas.push({
+          tipo: "variacao",
+          id: vid,
+          motivo: "Variação não encontrada",
+        });
         continue;
       }
       if (v.controlar_estoque === false) continue;
@@ -15838,13 +16674,16 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
         .from("produto_variacoes")
         .update({ estoque_qtd: Math.max(0, (v.estoque_qtd || 0) - qtd) })
         .eq("id", vid)
-        .eq("estoque_qtd", v.estoque_qtd)  // 🔒 optimistic lock
+        .eq("estoque_qtd", v.estoque_qtd) // 🔒 optimistic lock
         .select("id");
 
       if (_e || !_r?.length) {
         // Tentar com o valor atual novamente (fallback sem lock)
         const { data: fresh } = await supa
-          .from("produto_variacoes").select("estoque_qtd").eq("id", vid).single();
+          .from("produto_variacoes")
+          .select("estoque_qtd")
+          .eq("id", vid)
+          .single();
         const atual = fresh?.estoque_qtd ?? v.estoque_qtd;
         const { data: _r2, error: _e2 } = await supa
           .from("produto_variacoes")
@@ -15863,8 +16702,8 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
     }
 
     // ── 2b. Desconto em produtos (sem variação) ──────────────────
-    const prodsParaDescontar = prods.filter(
-      (p) => produtosSemVariacao.has(p.id),
+    const prodsParaDescontar = prods.filter((p) =>
+      produtosSemVariacao.has(p.id),
     );
 
     // Caminho 1: inventario_id
@@ -15891,28 +16730,44 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
     if (Object.keys(descontosInv).length > 0) {
       const invIds = Object.keys(descontosInv).map(Number);
       const { data: estoques, error: errEst } = await supa
-        .from("inventario").select("id, quantidade").in("id", invIds);
+        .from("inventario")
+        .select("id, quantidade")
+        .in("id", invIds);
       if (errEst) {
         falhas.push({ tipo: "query_inventario", motivo: errEst.message });
       } else {
         for (const est of estoques || []) {
-          const nova = Math.max(0, Number(est.quantidade ?? 0) - descontosInv[est.id]);
+          const nova = Math.max(
+            0,
+            Number(est.quantidade ?? 0) - descontosInv[est.id],
+          );
           const { data: _rows, error: _err } = await supa
-            .from("inventario").update({ quantidade: nova })
-            .eq("id", est.id).select("id");
+            .from("inventario")
+            .update({ quantidade: nova })
+            .eq("id", est.id)
+            .select("id");
           if (_err || !_rows?.length) {
             falhas.push({
-              tipo: "inventario", id: est.id,
+              tipo: "inventario",
+              id: est.id,
               motivo: _err?.message || "0 linhas afetadas",
             });
           } else {
-            await supa.from("inventario_movimentos").insert([{
-              inventario_id: est.id,
-              tipo: "sub",
-              quantidade: descontosInv[est.id],
-              motivo: pedidoId ? `Venda — Pedido #${pedidoId}` : "Venda PDV",
-              usuario_email: "sistema",
-            }]).then(() => {}).catch(() => {});
+            await supa
+              .from("inventario_movimentos")
+              .insert([
+                {
+                  inventario_id: est.id,
+                  tipo: "sub",
+                  quantidade: descontosInv[est.id],
+                  motivo: pedidoId
+                    ? `Venda — Pedido #${pedidoId}`
+                    : "Venda PDV",
+                  usuario_email: "sistema",
+                },
+              ])
+              .then(() => {})
+              .catch(() => {});
           }
         }
       }
@@ -15927,11 +16782,13 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
       const qtdVendida = qtdVendidaPorProdutoMapa(itens, prod.id);
       if (!qtdVendida) continue;
 
-      const { data: rpc, error: rpcErr } = await supa
-        .rpc("descontar_estoque_atomico", {
+      const { data: rpc, error: rpcErr } = await supa.rpc(
+        "descontar_estoque_atomico",
+        {
           p_produto_id: prod.id,
           p_qtd: qtdVendida,
-        });
+        },
+      );
 
       if (rpcErr) {
         console.warn(
@@ -15939,37 +16796,48 @@ async function _descontarEstoqueVenda(pedidoId, itensDireto) {
           rpcErr.message,
         );
         const { data: fresh } = await supa
-          .from("produtos").select("estoque_qtd").eq("id", prod.id).single();
+          .from("produtos")
+          .select("estoque_qtd")
+          .eq("id", prod.id)
+          .single();
         const atual = fresh?.estoque_qtd ?? prod.estoque_qtd;
         const novaQtd = Math.max(0, atual - qtdVendida);
         const updatePayload = { estoque_qtd: novaQtd };
         if (novaQtd === 0) updatePayload.ativo = false;
 
         const { data: _rows, error: _err } = await supa
-          .from("produtos").update(updatePayload)
-          .eq("id", prod.id).select("id");
+          .from("produtos")
+          .update(updatePayload)
+          .eq("id", prod.id)
+          .select("id");
         if (_err || !_rows?.length) {
           falhas.push({
-            tipo: "produto", id: prod.id, nome: prod.nome,
+            tipo: "produto",
+            id: prod.id,
+            nome: prod.nome,
             motivo: _err?.message || "0 linhas afetadas",
           });
         }
       } else if (rpc && rpc[0] && !rpc[0].sucesso) {
         falhas.push({
-          tipo: "produto", id: prod.id, nome: prod.nome,
+          tipo: "produto",
+          id: prod.id,
+          nome: prod.nome,
           motivo: rpc[0].motivo || "RPC retornou sucesso=false",
         });
       }
     }
 
     // ── Log final ────────────────────────────────────────────────
-    const total = Object.keys(descontosInv).length +
-                  Object.keys(qtdPorVariacao).length +
-                  produtosComEstoqueQtd.length;
+    const total =
+      Object.keys(descontosInv).length +
+      Object.keys(qtdPorVariacao).length +
+      produtosComEstoqueQtd.length;
 
     if (falhas.length) {
       console.error(
-        `❌ Falha ao descontar estoque — pedido ${pedidoId || "(PDV)"}:`, falhas,
+        `❌ Falha ao descontar estoque — pedido ${pedidoId || "(PDV)"}:`,
+        falhas,
       );
     } else {
       console.log(
@@ -15991,7 +16859,10 @@ async function _reporEstoqueCancelamento(pedidoId) {
   const falhas = [];
   try {
     const { data: pedido } = await supa
-      .from("pedidos").select("itens").eq("id", pedidoId).single();
+      .from("pedidos")
+      .select("itens")
+      .eq("id", pedidoId)
+      .single();
     const itens = pedido?.itens;
     if (!itens?.length) return { ok: true, falhas };
 
@@ -15999,14 +16870,14 @@ async function _reporEstoqueCancelamento(pedidoId) {
       ...new Set(
         itens
           .map((i) => Number(i.produto_id ?? i.id))
-          .filter((id) => Number.isInteger(id) && id > 0)
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
     const varIds = [
       ...new Set(
         itens
           .map((i) => Number(i.variacao_id))
-          .filter((id) => Number.isInteger(id) && id > 0)
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
 
@@ -16014,12 +16885,14 @@ async function _reporEstoqueCancelamento(pedidoId) {
     const [{ data: prods, error: errProds }, { data: variacoes }] =
       await Promise.all([
         prodIds.length
-          ? supa.from("produtos")
+          ? supa
+              .from("produtos")
               .select("id, nome, inventario_id, estoque_qtd, ativo")
               .in("id", prodIds)
           : Promise.resolve({ data: [] }),
         varIds.length
-          ? supa.from("produto_variacoes")
+          ? supa
+              .from("produto_variacoes")
               .select("id, nome, estoque_qtd, controlar_estoque")
               .in("id", varIds)
           : Promise.resolve({ data: [] }),
@@ -16035,7 +16908,9 @@ async function _reporEstoqueCancelamento(pedidoId) {
 
     // ── 1. Repõe variações ─────────────────────────────────────
     const mapaVariacoes = {};
-    (variacoes || []).forEach((v) => { mapaVariacoes[v.id] = v; });
+    (variacoes || []).forEach((v) => {
+      mapaVariacoes[v.id] = v;
+    });
 
     const qtdPorVariacao = {};
     itens.forEach((item) => {
@@ -16047,21 +16922,31 @@ async function _reporEstoqueCancelamento(pedidoId) {
     for (const [vid, qtd] of Object.entries(qtdPorVariacao)) {
       const v = mapaVariacoes[vid];
       if (!v) {
-        falhas.push({ tipo: "variacao", id: vid, motivo: "Variação não encontrada" });
+        falhas.push({
+          tipo: "variacao",
+          id: vid,
+          motivo: "Variação não encontrada",
+        });
         continue;
       }
       if (v.controlar_estoque === false) continue;
 
       const { data: fresh } = await supa
-        .from("produto_variacoes").select("estoque_qtd").eq("id", vid).single();
+        .from("produto_variacoes")
+        .select("estoque_qtd")
+        .eq("id", vid)
+        .single();
       const atual = fresh?.estoque_qtd ?? v.estoque_qtd ?? 0;
       const { data: _r, error: _e } = await supa
         .from("produto_variacoes")
         .update({ estoque_qtd: atual + qtd })
-        .eq("id", vid).select("id");
+        .eq("id", vid)
+        .select("id");
       if (_e || !_r?.length) {
         falhas.push({
-          tipo: "variacao", id: vid, nome: v.nome,
+          tipo: "variacao",
+          id: vid,
+          nome: v.nome,
           motivo: _e?.message || "0 linhas afetadas",
         });
       }
@@ -16082,31 +16967,43 @@ async function _reporEstoqueCancelamento(pedidoId) {
       if (!prod.inventario_id) return;
       const qtd = qtdPorProduto[prod.id];
       if (!qtd) return;
-      reposicoes[prod.inventario_id] = (reposicoes[prod.inventario_id] || 0) + qtd;
+      reposicoes[prod.inventario_id] =
+        (reposicoes[prod.inventario_id] || 0) + qtd;
     });
 
     if (Object.keys(reposicoes).length > 0) {
       const invIds = Object.keys(reposicoes).map(Number);
       const { data: estoques } = await supa
-        .from("inventario").select("id, quantidade").in("id", invIds);
+        .from("inventario")
+        .select("id, quantidade")
+        .in("id", invIds);
       for (const est of estoques || []) {
         const nova = (Number(est.quantidade) || 0) + reposicoes[est.id];
         const { data: _r, error: _e } = await supa
-          .from("inventario").update({ quantidade: nova })
-          .eq("id", est.id).select("id");
+          .from("inventario")
+          .update({ quantidade: nova })
+          .eq("id", est.id)
+          .select("id");
         if (_e || !_r?.length) {
           falhas.push({
-            tipo: "inventario", id: est.id,
+            tipo: "inventario",
+            id: est.id,
             motivo: _e?.message || "0 linhas afetadas",
           });
         } else {
-          await supa.from("inventario_movimentos").insert([{
-            inventario_id: est.id,
-            tipo: "ajuste",
-            quantidade: reposicoes[est.id],
-            motivo: `Cancelamento — Pedido #${pedidoId}`,
-            usuario_email: "sistema",
-          }]).then(() => {}).catch(() => {});
+          await supa
+            .from("inventario_movimentos")
+            .insert([
+              {
+                inventario_id: est.id,
+                tipo: "ajuste",
+                quantidade: reposicoes[est.id],
+                motivo: `Cancelamento — Pedido #${pedidoId}`,
+                usuario_email: "sistema",
+              },
+            ])
+            .then(() => {})
+            .catch(() => {});
         }
       }
     }
@@ -16122,10 +17019,15 @@ async function _reporEstoqueCancelamento(pedidoId) {
       const updatePayload = { estoque_qtd: novaQtd };
       if (novaQtd > 0 && prod.ativo === false) updatePayload.ativo = true;
       const { data: _r, error: _e } = await supa
-        .from("produtos").update(updatePayload).eq("id", prod.id).select("id");
+        .from("produtos")
+        .update(updatePayload)
+        .eq("id", prod.id)
+        .select("id");
       if (_e || !_r?.length) {
         falhas.push({
-          tipo: "produto", id: prod.id, nome: prod.nome,
+          tipo: "produto",
+          id: prod.id,
+          nome: prod.nome,
           motivo: _e?.message || "0 linhas afetadas",
         });
       }
@@ -16133,7 +17035,8 @@ async function _reporEstoqueCancelamento(pedidoId) {
 
     if (falhas.length) {
       console.error(
-        `❌ Falha ao repor estoque — pedido cancelado #${pedidoId}:`, falhas,
+        `❌ Falha ao repor estoque — pedido cancelado #${pedidoId}:`,
+        falhas,
       );
     } else {
       console.log(`✅ Estoque reposto: pedido cancelado #${pedidoId}`);
@@ -16171,15 +17074,17 @@ async function _estornarCashbackCancelamento(pedidoId) {
         .eq("id", tx.id);
 
       // Insere débito de estorno
-      await supa.from("cashback_transacoes").insert([{
-        cliente_id:       tx.cliente_id,
-        cliente_telefone: tx.cliente_telefone,
-        pedido_id:        pedidoId,
-        tipo:             "debito",
-        valor:            tx.valor,
-        validade_dias:    0,
-        usado:            true,
-      }]);
+      await supa.from("cashback_transacoes").insert([
+        {
+          cliente_id: tx.cliente_id,
+          cliente_telefone: tx.cliente_telefone,
+          pedido_id: pedidoId,
+          tipo: "debito",
+          valor: tx.valor,
+          validade_dias: 0,
+          usado: true,
+        },
+      ]);
 
       // Atualiza saldo do cliente
       if (tx.cliente_id) {
@@ -16196,7 +17101,9 @@ async function _estornarCashbackCancelamento(pedidoId) {
             .eq("id", tx.cliente_id);
         }
       }
-      console.log(`✅ Cashback estornado: Gs ${tx.valor} — pedido #${pedidoId}`);
+      console.log(
+        `✅ Cashback estornado: Gs ${tx.valor} — pedido #${pedidoId}`,
+      );
     }
   } catch (e) {
     console.warn("_estornarCashbackCancelamento:", e.message);
@@ -16676,14 +17583,12 @@ function toggleDeliveryRowPDV(tipo) {
 // Toggle switch de Delivery no PDV (chamado pelo HTML via onclick)
 // ── Toggle dados do cliente no PDV ─────────────────────────────────────
 function pdvToggleDados() {
-  const painel = document.querySelector('.pdv-dir-dados');
-  const icon   = document.getElementById('pdv-toggle-dados-icon');
+  const painel = document.querySelector(".pdv-dir-dados");
+  const icon = document.getElementById("pdv-toggle-dados-icon");
   if (!painel) return;
-  const aberto = painel.classList.toggle('pdv-dados-aberto');
+  const aberto = painel.classList.toggle("pdv-dados-aberto");
   if (icon) {
-    icon.className = aberto
-      ? 'fas fa-chevron-up'
-      : 'fas fa-chevron-down';
+    icon.className = aberto ? "fas fa-chevron-up" : "fas fa-chevron-down";
   }
 }
 
@@ -16696,20 +17601,19 @@ function pdvToggleDelivery(el) {
   if (chip) chip.textContent = isDelivery ? "🛵 Delivery" : "🏪 Balcão";
   // Ao ativar delivery, garante que o painel de dados do cliente esteja visível
   if (isDelivery) {
-    const painel = document.querySelector('.pdv-dir-dados');
-    const icon   = document.getElementById('pdv-toggle-dados-icon');
-    if (painel && !painel.classList.contains('pdv-dados-aberto')) {
-      painel.classList.add('pdv-dados-aberto');
-      if (icon) icon.className = 'fas fa-chevron-up';
+    const painel = document.querySelector(".pdv-dir-dados");
+    const icon = document.getElementById("pdv-toggle-dados-icon");
+    if (painel && !painel.classList.contains("pdv-dados-aberto")) {
+      painel.classList.add("pdv-dados-aberto");
+      if (icon) icon.className = "fas fa-chevron-up";
     }
   }
   toggleDeliveryRowPDV(isDelivery ? "delivery" : "balcao");
 }
 
-
 async function calcularFretePDV() {
-  const btn        = document.getElementById("btn-gps-pdv");
-  const msg        = document.getElementById("frete-msg-pdv");
+  const btn = document.getElementById("btn-gps-pdv");
+  const msg = document.getElementById("frete-msg-pdv");
   const freteInput = document.getElementById("balcao-frete");
 
   // Guard: se o HTML estiver desatualizado (sem id no botão), ainda
@@ -16728,7 +17632,9 @@ async function calcularFretePDV() {
   };
 
   if (!msg || !freteInput) {
-    console.warn("[calcularFretePDV] Elementos #frete-msg-pdv ou #balcao-frete não encontrados.");
+    console.warn(
+      "[calcularFretePDV] Elementos #frete-msg-pdv ou #balcao-frete não encontrados.",
+    );
     return;
   }
 
@@ -16754,7 +17660,9 @@ async function calcularFretePDV() {
   };
 
   // ── Tenta extrair coordenadas do link colado no campo endereço ──────
-  const endVal = (document.getElementById("balcao-endereco")?.value || "").trim();
+  const endVal = (
+    document.getElementById("balcao-endereco")?.value || ""
+  ).trim();
   let lat = null,
     lng = null;
 
@@ -17002,7 +17910,9 @@ async function iniciarOnboarding() {
   try {
     const { data, error } = await supa
       .from("configuracoes")
-      .select("nome_restaurante, logo_url, icone_url, whatsapp_loja, coord_lat, coord_lng")
+      .select(
+        "nome_restaurante, logo_url, icone_url, whatsapp_loja, coord_lat, coord_lng",
+      )
       .maybeSingle();
 
     if (error) {
@@ -17013,10 +17923,10 @@ async function iniciarOnboarding() {
 
     // ── 2. Verifica se o banco JÁ tem dados de identidade.
     //    Um nome só com espaços ou vazio NÃO conta como configurado. ──
-    const nomeOk   = (data?.nome_restaurante || "").trim().length > 0;
-    const logoOk   = (data?.logo_url || data?.icone_url || "").trim().length > 0;
-    const whatsOk  = (data?.whatsapp_loja || "").trim().length > 0;
-    const coordOk  = !!(data?.coord_lat && data?.coord_lng);
+    const nomeOk = (data?.nome_restaurante || "").trim().length > 0;
+    const logoOk = (data?.logo_url || data?.icone_url || "").trim().length > 0;
+    const whatsOk = (data?.whatsapp_loja || "").trim().length > 0;
+    const coordOk = !!(data?.coord_lat && data?.coord_lng);
 
     if (nomeOk || logoOk || whatsOk || coordOk) {
       // Já está configurado → marca a flag e nunca mais verifica
@@ -17540,7 +18450,10 @@ async function admAceitarContrato() {
 
     // ── Fallback defensivo: se a UNIQUE constraint não existir ainda,
     //    cai para o fluxo antigo (UPDATE → INSERT). ──
-    if (error && /no unique|there is no unique|onConflict/i.test(error.message || "")) {
+    if (
+      error &&
+      /no unique|there is no unique|onConflict/i.test(error.message || "")
+    ) {
       const { data: existing } = await supa
         .from("contratos_aceites")
         .select("id")
@@ -17990,7 +18903,12 @@ function ptVerificarValidadeProdutos(diasAlertaPadrao = 7) {
     if (!p.perecivel || !p.data_validade) return;
     // Não alertar se produto está sem estoque (zerado ou pausado)
     if (p.ativo === false) return;
-    if (p.estoque_qtd !== null && p.estoque_qtd !== undefined && p.estoque_qtd <= 0) return;
+    if (
+      p.estoque_qtd !== null &&
+      p.estoque_qtd !== undefined &&
+      p.estoque_qtd <= 0
+    )
+      return;
     const val = new Date(p.data_validade + "T00:00:00");
     const dias = Math.ceil((val - hoje) / 86400000);
     // Cada produto pode ter sua própria antecedência (7/15/30 dias);
@@ -18476,23 +19394,23 @@ function togglePromoFields(on) {
 }
 
 function promoAtualizarPreview() {
-  const tipo  = document.getElementById("prod-promo-tipo")?.value  || "percent";
-  const valor = parseFloat(document.getElementById("prod-promo-valor")?.value) || 0;
+  const tipo = document.getElementById("prod-promo-tipo")?.value || "percent";
+  const valor =
+    parseFloat(document.getElementById("prod-promo-valor")?.value) || 0;
 
   // ── Lê o preço do dataset.valorNumerico (número puro), com fallback para value
   const _p = document.getElementById("prod-preco");
   const preco =
     parseInt(
-      _p?.dataset?.valorNumerico ||
-      (_p?.value || "").replace(/\D/g, "") ||
-      "0",
-      10
+      _p?.dataset?.valorNumerico || (_p?.value || "").replace(/\D/g, "") || "0",
+      10,
     ) || 0;
 
-  const prev  = document.getElementById("prod-promo-preview");
+  const prev = document.getElementById("prod-promo-preview");
   const label = document.getElementById("prod-promo-valor-label");
 
-  if (label) label.textContent = tipo === "percent" ? "Desconto (%)" : "Desconto (Gs)";
+  if (label)
+    label.textContent = tipo === "percent" ? "Desconto (%)" : "Desconto (Gs)";
   if (!prev) return;
 
   if (!valor || !preco) {
@@ -18513,9 +19431,11 @@ function promoAtualizarPreview() {
   prev.innerHTML = `
     De <s style="color:#aaa">Gs ${Math.round(preco).toLocaleString("es-PY")}</s>
     por <b style="color:#dc2626">Gs ${Math.round(precoFinal).toLocaleString("es-PY")}</b>
-    ${tipo === "percent"
-      ? `(${valor}% off)`
-      : `(- Gs ${Math.round(valor).toLocaleString("es-PY")})`}
+    ${
+      tipo === "percent"
+        ? `(${valor}% off)`
+        : `(- Gs ${Math.round(valor).toLocaleString("es-PY")})`
+    }
   `;
 }
 
@@ -19018,7 +19938,10 @@ async function impexpSalvar() {
   if (!_impexpDadosImport.length) return;
 
   const btn = document.querySelector("#impexp-preview-wrap .btn-primary");
-  if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Salvando…";
+  }
 
   // ── 1. Normaliza os dados (mesmo formato que você já usa) ──
   const payload = _impexpDadosImport
@@ -19044,7 +19967,9 @@ async function impexpSalvar() {
   // ── 2. Deduplica por nome (o JSON tem duplicatas: "Barrinha Bless..."x2) ──
   //    Mantém o ÚLTIMO registro de cada nome (o que veio por último no array)
   const mapaUnicos = {};
-  payload.forEach((p) => { mapaUnicos[p.nome] = p; });
+  payload.forEach((p) => {
+    mapaUnicos[p.nome] = p;
+  });
   const payloadUnico = Object.values(mapaUnicos);
 
   // ── 3. Busca nomes já existentes no banco (uma query só) ──
@@ -19057,12 +19982,17 @@ async function impexpSalvar() {
   if (errBusca) {
     console.error("Erro ao buscar existentes:", errBusca);
     alert("❌ Erro ao consultar produtos existentes: " + errBusca.message);
-    if (btn) { btn.disabled = false; btn.textContent = "Salvar"; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Salvar";
+    }
     return;
   }
 
   const mapaExistentes = {};
-  (existentes || []).forEach((e) => { mapaExistentes[e.nome] = e.id; });
+  (existentes || []).forEach((e) => {
+    mapaExistentes[e.nome] = e.id;
+  });
 
   // ── 4. Separa em novos × atualizações ──
   const novos = [];
@@ -19087,7 +20017,9 @@ async function impexpSalvar() {
     if (error) {
       console.error("Insert erro:", error);
       erros += lote.length;
-      errosDetalhados.push(`INSERT (lote ${Math.floor(i/LOTE)+1}): ${error.message}`);
+      errosDetalhados.push(
+        `INSERT (lote ${Math.floor(i / LOTE) + 1}): ${error.message}`,
+      );
     } else {
       salvos += lote.length;
     }
@@ -19126,9 +20058,11 @@ async function impexpSalvar() {
     console.warn("Erros detalhados:", errosDetalhados);
     alert(
       `⚠️ ${salvos} salvos, ${erros} com erro.\n\n` +
-      errosDetalhados.slice(0, 3).join("\n") +
-      (errosDetalhados.length > 3 ? `\n… e mais ${errosDetalhados.length - 3}` : "") +
-      "\n\nVeja o console (F12) para detalhes."
+        errosDetalhados.slice(0, 3).join("\n") +
+        (errosDetalhados.length > 3
+          ? `\n… e mais ${errosDetalhados.length - 3}`
+          : "") +
+        "\n\nVeja o console (F12) para detalhes.",
     );
   }
 }
@@ -19166,9 +20100,9 @@ async function impexpSalvar() {
  * Escala proporcionalmente paddings, fontes e código de barras.
  */
 const _LABEL_SIZES = {
-  48: { total: 48, inner: 44, pad: 1.5, scale: 1.00, barcodeH: 32, thumb: 10 },
+  48: { total: 48, inner: 44, pad: 1.5, scale: 1.0, barcodeH: 32, thumb: 10 },
   58: { total: 58, inner: 54, pad: 2.0, scale: 1.15, barcodeH: 38, thumb: 12 },
-  72: { total: 72, inner: 68, pad: 2.5, scale: 1.40, barcodeH: 46, thumb: 14 },
+  72: { total: 72, inner: 68, pad: 2.5, scale: 1.4, barcodeH: 46, thumb: 14 },
   80: { total: 80, inner: 76, pad: 3.0, scale: 1.55, barcodeH: 52, thumb: 16 },
 };
 
@@ -19180,7 +20114,8 @@ const _LABEL_SIZE_DEFAULT = 48;
  */
 function _getLabelSize() {
   const saved = parseInt(
-    localStorage.getItem(_LABEL_SIZE_STORAGE_KEY) || String(_LABEL_SIZE_DEFAULT),
+    localStorage.getItem(_LABEL_SIZE_STORAGE_KEY) ||
+      String(_LABEL_SIZE_DEFAULT),
     10,
   );
   return _LABEL_SIZES[saved] || _LABEL_SIZES[_LABEL_SIZE_DEFAULT];
@@ -19307,9 +20242,7 @@ function _imprimirLote(produtos) {
 
   const doc = iframe.contentWindow.document;
 
-  doc.body.innerHTML = validos
-    .map((p, i) => _gerarHtmlEtiqueta(p, i))
-    .join("");
+  doc.body.innerHTML = validos.map((p, i) => _gerarHtmlEtiqueta(p, i)).join("");
 
   const style = doc.createElement("style");
   style.textContent = `
@@ -19491,21 +20424,33 @@ function _faixaAtualizarPreview() {
   const prev = document.getElementById("faixas-preview");
   if (!prev) return;
 
-  const unitario   = parseInt(document.getElementById("prod-faixa-unitario")?.value)   || 0;
-  const f1Min      = parseInt(document.getElementById("prod-faixa1-min")?.value)       || 0;
-  const f1Preco    = parseInt(document.getElementById("prod-faixa1-preco")?.value)     || 0;
-  const f2Min      = parseInt(document.getElementById("prod-faixa2-min")?.value)       || 0;
-  const f2Preco    = parseInt(document.getElementById("prod-faixa2-preco")?.value)     || 0;
+  const unitario =
+    parseInt(document.getElementById("prod-faixa-unitario")?.value) || 0;
+  const f1Min =
+    parseInt(document.getElementById("prod-faixa1-min")?.value) || 0;
+  const f1Preco =
+    parseInt(document.getElementById("prod-faixa1-preco")?.value) || 0;
+  const f2Min =
+    parseInt(document.getElementById("prod-faixa2-min")?.value) || 0;
+  const f2Preco =
+    parseInt(document.getElementById("prod-faixa2-preco")?.value) || 0;
 
-  if (!unitario) { prev.textContent = "Informe o preço unitário base."; return; }
+  if (!unitario) {
+    prev.textContent = "Informe o preço unitário base.";
+    return;
+  }
 
   const linhas = [`• 1 un → ${vfFmtGs(unitario)}`];
 
   if (f1Min && f1Preco) {
-    linhas.push(`• ${f1Min}–${f2Min && f2Preco ? (f2Min - 1) : "∞"} un → ${vfFmtGs(f1Preco)} (economia ${(100 - f1Preco/unitario*100).toFixed(0)}%)`);
+    linhas.push(
+      `• ${f1Min}–${f2Min && f2Preco ? f2Min - 1 : "∞"} un → ${vfFmtGs(f1Preco)} (economia ${(100 - (f1Preco / unitario) * 100).toFixed(0)}%)`,
+    );
   }
   if (f2Min && f2Preco) {
-    linhas.push(`• ${f2Min}+ un → ${vfFmtGs(f2Preco)} (economia ${(100 - f2Preco/unitario*100).toFixed(0)}%)`);
+    linhas.push(
+      `• ${f2Min}+ un → ${vfFmtGs(f2Preco)} (economia ${(100 - (f2Preco / unitario) * 100).toFixed(0)}%)`,
+    );
   }
 
   prev.innerHTML = linhas.join("<br>");
@@ -19523,17 +20468,18 @@ function _coletarFaixasPreco() {
   const ativo = document.getElementById("prod-tem-faixas")?.checked;
   if (!ativo) return null;
 
-  const _faixaUniEl  = document.getElementById("prod-faixa-unitario");
+  const _faixaUniEl = document.getElementById("prod-faixa-unitario");
   const _precoMainEl = document.getElementById("prod-preco");
 
   // ── Auto-sync 1: campo unitário vazio mas preço principal preenchido ──
   if (_faixaUniEl && (!_faixaUniEl.value || _faixaUniEl.value === "0")) {
-    const _herdado = parseInt(
-      _precoMainEl?.dataset?.valorNumerico ||
-        (_precoMainEl?.value || "").replace(/\D/g, "") ||
-        "0",
-      10,
-    ) || 0;
+    const _herdado =
+      parseInt(
+        _precoMainEl?.dataset?.valorNumerico ||
+          (_precoMainEl?.value || "").replace(/\D/g, "") ||
+          "0",
+        10,
+      ) || 0;
     if (_herdado > 0) _faixaUniEl.value = _herdado;
   }
 
@@ -19551,10 +20497,14 @@ function _coletarFaixasPreco() {
     _precoMainEl.dataset.valorNumerico = String(unitario);
   }
 
-  const faixa1_min   = parseInt(document.getElementById("prod-faixa1-min")?.value)   || null;
-  const faixa1_preco = parseInt(document.getElementById("prod-faixa1-preco")?.value) || null;
-  const faixa2_min   = parseInt(document.getElementById("prod-faixa2-min")?.value)   || null;
-  const faixa2_preco = parseInt(document.getElementById("prod-faixa2-preco")?.value) || null;
+  const faixa1_min =
+    parseInt(document.getElementById("prod-faixa1-min")?.value) || null;
+  const faixa1_preco =
+    parseInt(document.getElementById("prod-faixa1-preco")?.value) || null;
+  const faixa2_min =
+    parseInt(document.getElementById("prod-faixa2-min")?.value) || null;
+  const faixa2_preco =
+    parseInt(document.getElementById("prod-faixa2-preco")?.value) || null;
 
   // ── Validações com aviso explícito (antes falhavam em silêncio) ──
   if (faixa1_min && faixa1_min < 2) {
@@ -19570,11 +20520,11 @@ function _coletarFaixasPreco() {
 
   const out = { unitario };
   if (faixa1_min && faixa1_preco) {
-    out.faixa1_min   = faixa1_min;
+    out.faixa1_min = faixa1_min;
     out.faixa1_preco = faixa1_preco;
   }
   if (faixa2_min && faixa2_preco) {
-    out.faixa2_min   = faixa2_min;
+    out.faixa2_min = faixa2_min;
     out.faixa2_preco = faixa2_preco;
   }
 
@@ -19586,13 +20536,21 @@ function _coletarFaixasPreco() {
  * Chamado em abrirModalProduto.
  */
 function _renderizarFaixasPreco(produto) {
-  const chk   = document.getElementById("prod-tem-faixas");
-  const area  = document.getElementById("faixas-preco-area");
+  const chk = document.getElementById("prod-tem-faixas");
+  const area = document.getElementById("faixas-preco-area");
   if (!chk || !area) return;
 
   // Reset
-  ["prod-faixa-unitario","prod-faixa1-min","prod-faixa1-preco","prod-faixa2-min","prod-faixa2-preco"]
-    .forEach((id) => { const el = document.getElementById(id); if (el) el.value = ""; });
+  [
+    "prod-faixa-unitario",
+    "prod-faixa1-min",
+    "prod-faixa1-preco",
+    "prod-faixa2-min",
+    "prod-faixa2-preco",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
   const prev = document.getElementById("faixas-preview");
   if (prev) prev.textContent = "";
 
@@ -19607,10 +20565,14 @@ function _renderizarFaixasPreco(produto) {
   toggleFaixasPreco(true);
 
   document.getElementById("prod-faixa-unitario").value = cfg.unitario || "";
-  if (cfg.faixa1_min)   document.getElementById("prod-faixa1-min").value   = cfg.faixa1_min;
-  if (cfg.faixa1_preco) document.getElementById("prod-faixa1-preco").value = cfg.faixa1_preco;
-  if (cfg.faixa2_min)   document.getElementById("prod-faixa2-min").value   = cfg.faixa2_min;
-  if (cfg.faixa2_preco) document.getElementById("prod-faixa2-preco").value = cfg.faixa2_preco;
+  if (cfg.faixa1_min)
+    document.getElementById("prod-faixa1-min").value = cfg.faixa1_min;
+  if (cfg.faixa1_preco)
+    document.getElementById("prod-faixa1-preco").value = cfg.faixa1_preco;
+  if (cfg.faixa2_min)
+    document.getElementById("prod-faixa2-min").value = cfg.faixa2_min;
+  if (cfg.faixa2_preco)
+    document.getElementById("prod-faixa2-preco").value = cfg.faixa2_preco;
 
   _faixaAtualizarPreview();
 }
@@ -19626,7 +20588,10 @@ function pdvSetQtyMultiplier(n) {
   window._pdvQtyMultiplier = Math.max(1, parseInt(n, 10) || 1);
   // Atualiza UI dos botões
   document.querySelectorAll(".pdv-qty-mult-btn").forEach((b) => {
-    b.classList.toggle("active", parseInt(b.dataset.qty, 10) === window._pdvQtyMultiplier);
+    b.classList.toggle(
+      "active",
+      parseInt(b.dataset.qty, 10) === window._pdvQtyMultiplier,
+    );
   });
   const badge = document.getElementById("pdv-qty-mult-badge");
   if (badge) {
@@ -19675,9 +20640,10 @@ function _pdvRealocarBuscaParaTopo() {
 
   // Move também a barra de Qtd para DEPOIS da busca
   // (na versão live ela fica em segundo plano ou escondida)
-  const qtyBar = [...colEsq.children].find(el =>
-    el.querySelector?.("input[type=number], .pdv-qty-mult-btn") &&
-    !el.classList.contains("pdv-busca-wrap")
+  const qtyBar = [...colEsq.children].find(
+    (el) =>
+      el.querySelector?.("input[type=number], .pdv-qty-mult-btn") &&
+      !el.classList.contains("pdv-busca-wrap"),
   );
   if (qtyBar && buscaWrap.nextElementSibling !== qtyBar) {
     buscaWrap.after(qtyBar);
@@ -19686,7 +20652,7 @@ function _pdvRealocarBuscaParaTopo() {
   // Move o chip F2 para logo abaixo da busca, se ele estiver solto
   // (a versão live tinha o F2 acima dos resultados, não ao lado)
   const f2Badge = document.getElementById("pdv-f2-badge");
-  const f2Btn   = document.getElementById("pdv-f2-btn");
+  const f2Btn = document.getElementById("pdv-f2-btn");
   if (f2Badge && f2Badge.parentElement !== buscaWrap) {
     buscaWrap.appendChild(f2Badge);
   }
@@ -19765,7 +20731,9 @@ async function _atualizarBadgePedidosPendentes() {
     // Só toca se o operador está no PDV — nas outras abas o realtime
     // já cuida, e evita-se som duplicado fora de contexto.
     if (_abaAtual === "pdv" && typeof tocarAlarme === "function") {
-      console.log(`[PDV] 🔔 Novo pedido pendente (${_countAnterior} → ${n}) — tocando alarme`);
+      console.log(
+        `[PDV] 🔔 Novo pedido pendente (${_countAnterior} → ${n}) — tocando alarme`,
+      );
       tocarAlarme();
     }
   }
@@ -19782,9 +20750,9 @@ async function _atualizarBadgePedidosPendentes() {
   }
 
   // ── 2. Card de alerta dentro da aba PDV ───────────────────────
-  const card   = document.getElementById("pdv-alerta-pedidos");
+  const card = document.getElementById("pdv-alerta-pedidos");
   const titulo = document.getElementById("pdv-alerta-titulo");
-  const sub    = document.getElementById("pdv-alerta-sub");
+  const sub = document.getElementById("pdv-alerta-sub");
 
   if (card) {
     if (n > 0) {
@@ -19806,4 +20774,183 @@ async function _atualizarBadgePedidosPendentes() {
   }
 
   return n;
-};
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LÓGICA DE CLIENTE PARA O FIADO (NA NOTA) NO PDV
+// ═══════════════════════════════════════════════════════════════
+
+// Mostra/oculta o bloco amarelo dependendo da forma de pagamento
+function _pdvToggleBlocoNaNota(pag) {
+  // Garante que o HTML do bloco Na Nota exista (injeção automática)
+  _pdvInjetarUiNaNota();
+
+  const bloco = document.getElementById("pdv-bloco-nanota");
+  const dadosPadrao = document.getElementById("pdv-dados-padrao");
+  const painel = document.querySelector(".pdv-dir-dados");
+  const icon = document.getElementById("pdv-toggle-dados-icon");
+
+  if (bloco && dadosPadrao) {
+    if (pag === "NaNota") {
+      bloco.style.display = "block";
+      dadosPadrao.style.display = "none";
+
+      // 🔧 Força o painel a abrir para o usuário ver o campo!
+      if (painel && !painel.classList.contains("pdv-dados-aberto")) {
+        painel.classList.add("pdv-dados-aberto");
+        if (icon) icon.className = "fas fa-chevron-up";
+      }
+    } else {
+      bloco.style.display = "none";
+      dadosPadrao.style.display = "block";
+      pdvLimparClienteNaNota();
+    }
+  }
+}
+
+// Função que cria o HTML dinamicamente (não precisa editar o admin.html)
+function _pdvInjetarUiNaNota() {
+  const dadosContainer = document.querySelector(".pdv-dir-dados");
+  if (!dadosContainer) return;
+
+  // Se já existe, não cria de novo
+  if (document.getElementById("pdv-bloco-nanota")) return;
+
+  // Envolve os inputs de cliente/telefone antigos numa div #pdv-dados-padrao
+  if (!document.getElementById("pdv-dados-padrao")) {
+    const originalHTML = dadosContainer.innerHTML;
+    dadosContainer.innerHTML = `<div id="pdv-dados-padrao">${originalHTML}</div>`;
+  }
+
+  // Cria o bloco novo e insere no topo
+  const blocoHtml = `
+    <div id="pdv-bloco-nanota" style="display:none; background:#fffbeb; border:1.5px solid #fcd34d; border-radius:8px; padding:8px; margin-bottom:8px;">
+      <div style="font-size:0.75rem; font-weight:700; color:#92400e; margin-bottom:6px;">
+        📋 FIADO (NA NOTA) - CLIENTE OBRIGATÓRIO
+      </div>
+      <input type="text" id="pdv-busca-cliente-nanota" class="pdv-dir-input" placeholder="Buscar por nome ou telefone..." oninput="pdvBuscarClienteNaNota(this.value)" style="margin-bottom:6px; border-color:#fcd34d;">
+      <div id="pdv-lista-clientes-nanota" style="display:none; max-height:120px; overflow-y:auto; background:#fff; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:6px;"></div>
+      
+      <div id="pdv-cliente-nanota-selecionado" style="display:none; background:#d1fae5; border:1px solid #10b981; border-radius:6px; padding:6px; margin-bottom:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div id="pdv-nanota-nome" style="font-size:0.85rem; font-weight:700; color:#065f46;">-</div>
+            <div id="pdv-nanota-tel" style="font-size:0.75rem; color:#047857;">-</div>
+          </div>
+          <button type="button" onclick="pdvLimparClienteNaNota()" style="background:none;border:none;color:#ef4444;font-size:1.2rem;cursor:pointer;line-height:1;">×</button>
+        </div>
+      </div>
+
+      <button type="button" onclick="pdvAbrirModalNovoClienteNaNota()" style="width:100%; padding:6px; background:#fff; color:#92400e; border:1px dashed #fcd34d; border-radius:6px; font-weight:700; font-size:0.75rem; cursor:pointer;">
+        + Cadastrar novo cliente
+      </button>
+    </div>
+  `;
+  dadosContainer.insertAdjacentHTML("afterbegin", blocoHtml);
+}
+
+// Busca clientes no banco enquanto digita
+let _pdvTimeoutBuscaCliente;
+function pdvBuscarClienteNaNota(termo) {
+  clearTimeout(_pdvTimeoutBuscaCliente);
+  const lista = document.getElementById("pdv-lista-clientes-nanota");
+
+  if (termo.length < 2) {
+    lista.style.display = "none";
+    return;
+  }
+
+  _pdvTimeoutBuscaCliente = setTimeout(async () => {
+    const { data, error } = await supa
+      .from("clientes")
+      .select("id, nome, telefone")
+      .or(`nome.ilike.%${termo}%,telefone.ilike.%${termo}%`)
+      .limit(10);
+
+    if (error || !data || data.length === 0) {
+      lista.innerHTML =
+        '<div style="padding:8px; font-size:0.8rem; color:#888; text-align:center;">Nenhum cliente encontrado.</div>';
+      lista.style.display = "block";
+      return;
+    }
+
+    lista.innerHTML = data
+      .map(
+        (c) => `
+      <div style="padding:8px 10px; border-bottom:1px solid #f3f4f6; cursor:pointer; font-size:0.85rem;"
+           onclick="pdvSelecionarClienteNaNota('${c.nome.replace(/'/g, "\\'")}', '${c.telefone}')"
+           onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='#fff'">
+        <div style="font-weight:700; color:#333;">${c.nome}</div>
+        <div style="font-size:0.75rem; color:#888;">${c.telefone}</div>
+      </div>
+    `,
+      )
+      .join("");
+    lista.style.display = "block";
+  }, 400); // Espera 400ms para não sobrecarregar o banco
+}
+
+// Quando clica no nome do cliente na lista
+function pdvSelecionarClienteNaNota(nome, telefone) {
+  // Preenche os inputs reais que a função salvarPedidoBalcao() vai ler
+  document.getElementById("balcao-cliente").value = nome;
+  document.getElementById("balcao-telefone").value = telefone;
+
+  // Atualiza o visual verde de selecionado
+  document.getElementById("pdv-nanota-nome").textContent = nome;
+  document.getElementById("pdv-nanota-tel").textContent = telefone;
+  document.getElementById("pdv-cliente-nanota-selecionado").style.display =
+    "block";
+
+  // Esconde a busca
+  document.getElementById("pdv-lista-clientes-nanota").style.display = "none";
+  document.getElementById("pdv-busca-cliente-nanota").value = "";
+}
+
+// Limpa a seleção
+function pdvLimparClienteNaNota() {
+  document.getElementById("balcao-cliente").value = "";
+  document.getElementById("balcao-telefone").value = "";
+  document.getElementById("pdv-cliente-nanota-selecionado").style.display =
+    "none";
+  document.getElementById("pdv-busca-cliente-nanota").value = "";
+  document.getElementById("pdv-lista-clientes-nanota").style.display = "none";
+}
+
+// Cadastra um novo cliente direto no PDV
+function pdvAbrirModalNovoClienteNaNota() {
+  const nome = prompt("Nome do novo cliente:");
+  if (!nome || !nome.trim()) return;
+
+  const tel = prompt("Telefone do cliente (com DDD/País):");
+  if (!tel || !tel.trim()) return;
+
+  _pdvSalvarNovoClienteNaNota(nome.trim(), tel.trim());
+}
+
+async function _pdvSalvarNovoClienteNaNota(nome, telefone) {
+  try {
+    // Verifica se já existe para não duplicar
+    const { data: existente } = await supa
+      .from("clientes")
+      .select("id")
+      .eq("telefone", telefone)
+      .maybeSingle();
+
+    if (!existente) {
+      await supa.from("clientes").insert([{ nome, telefone }]);
+    }
+
+    // Seleciona automaticamente
+    pdvSelecionarClienteNaNota(nome, telefone);
+
+    // Toast de sucesso
+    if (typeof mostrarToast === "function") {
+      mostrarToast(`Cliente "${nome}" cadastrado!`, "success", 2500);
+    } else {
+      alert(`✅ Cliente "${nome}" cadastrado!`);
+    }
+  } catch (e) {
+    alert("Erro ao cadastrar cliente: " + e.message);
+  }
+}

@@ -4,7 +4,7 @@
 //    1. Incremente CACHE_NAME (ex: v1.4, v1.5…)
 //    2. O SW antigo detecta a diferença no activate e apaga os caches velhos.
 // ─────────────────────────────────────────────────────────────
-const CACHE_NAME = "laoficina-v1.0"; // ← BUMP obrigatório
+const CACHE_NAME = "laoficina-v1.1"; // ← BUMP obrigatório
 
 const BLOCKED_ORIGINS = [
   "instagram.",
