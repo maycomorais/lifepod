@@ -15,6 +15,7 @@ const ADMIN_LANGS = {
     // ── Sidebar ────────────────────────────────────────────
     'sidebar.visao':        'Visão',
     'sidebar.pdv':          'PDV Balcão',
+    'sidebar.notas':        'Na Nota',
     'sidebar.pedidos':      'Pedidos',
     'sidebar.cozinha':      'Separação',
     'sidebar.equipe':       'Equipe',
@@ -642,6 +643,7 @@ const ADMIN_LANGS = {
     // ── Sidebar ────────────────────────────────────────────
     'sidebar.visao':        'Visión',
     'sidebar.pdv':          'PDV Mostrador',
+    'sidebar.notas':        'Fiado',
     'sidebar.pedidos':      'Pedidos',
     'sidebar.cozinha':      'Separación',
     'sidebar.equipe':       'Equipo',
