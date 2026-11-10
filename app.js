@@ -3112,19 +3112,62 @@ function verificarPagamento() {
     boxTroco.classList.remove("hidden");
   } else if (pag === "Pix") {
     infoDiv.style.display = "block";
+    
+    // Calcula o total (mesma lógica que você já usava)
     const totalItens = carrinho.reduce((a, i) => a + i.preco * i.qtd, 0);
-    let freteAplicado =
-      modoEntrega === "delivery" ? Math.max(0, freteCalculado) : 0;
+    let freteAplicado = modoEntrega === "delivery" ? Math.max(0, freteCalculado) : 0;
     let desconto = 0;
+    
     if (cupomAplicado) {
       if (cupomAplicado.tipo === "percentual")
         desconto = Math.round(totalItens * (cupomAplicado.valor / 100));
       else if (cupomAplicado.tipo === "frete") freteAplicado = 0;
     }
+    
     const totalGs = totalItens - desconto + freteAplicado;
-    const totalBrl =
-      COTACAO_REAL > 0 ? (totalGs / COTACAO_REAL).toFixed(2) : "---";
-    infoDiv.innerHTML = `<strong>💳 Chave Pix:</strong><br>${CHAVE_PIX}<br><small>Titular: ${NOME_PIX}</small><br><strong style="color:#27ae60;font-size:1rem">💰 Valor: R$ ${totalBrl}</strong>`;
+    const totalBrl = COTACAO_REAL > 0 ? (totalGs / COTACAO_REAL).toFixed(2) : "0.00";
+    
+    // Gera o código Pix Copia e Cola
+    let pixCopiaECola = "";
+    if (COTACAO_REAL > 0 && CHAVE_PIX && NOME_PIX) {
+      // "SAO PAULO" é a cidade padrão, você pode alterar se quiser
+      pixCopiaECola = _pixGerarPayload(CHAVE_PIX, NOME_PIX, "SAO PAULO", totalBrl);
+    }
+
+    // Monta a UI do Pix
+    infoDiv.innerHTML = `
+      <div style="background:#e8f5e9;border:2px dashed #4caf50;border-radius:12px;padding:16px;margin-top:10px;text-align:center;box-shadow:0 4px 10px rgba(76,175,80,0.1);">
+        <h4 style="margin:0 0 12px 0;color:#2e7d32;font-size:1.1rem;"><i class="fas fa-qrcode"></i> Pagamento via Pix</h4>
+        
+        <div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:12px;">
+          <p style="margin:0 0 4px 0;font-size:0.85rem;color:#666;">Chave: <b>${CHAVE_PIX}</b></p>
+          <p style="margin:0;font-size:0.85rem;color:#666;">Titular: <b>${NOME_PIX}</b></p>
+        </div>
+        
+        <div style="font-size:1.6rem;font-weight:900;color:#1b5e20;margin-bottom:16px;">
+          💰 R$ ${totalBrl}
+        </div>
+        
+        ${pixCopiaECola ? `
+          <!-- Input invisível com o código -->
+          <input type="text" id="pix-copia-cola" readonly value="${pixCopiaECola}" style="position:absolute;left:-9999px;">
+          
+          <button id="btn-copiar-pix" onclick="copiarPixCopiaECola()" 
+            style="width:100%;padding:14px;background:#2e7d32;color:#fff;border:none;border-radius:10px;
+                   font-weight:700;font-size:1rem;cursor:pointer;display:flex;align-items:center;
+                   justify-content:center;gap:8px;transition:background 0.2s;">
+            📋 Copiar Código Pix
+          </button>
+          <p style="margin:8px 0 0 0;font-size:0.75rem;color:#555;">
+            Abra o app do seu banco e escolha "Pix Copia e Cola".
+          </p>
+        ` : `
+          <p style="color:#c62828;font-size:0.85rem;font-weight:600;">
+            ⚠️ A loja não configurou a cotação ou a chave PIX corretamente no painel.
+          </p>
+        `}
+      </div>
+    `;
   } else if (pag === "Transferencia") {
     infoDiv.style.display = "block";
     infoDiv.innerHTML = `<strong>🏦 Dados para Transferência:</strong><br>${DADOS_ALIAS}<br>${ALIAS_PY}`;
@@ -3134,20 +3177,17 @@ function verificarPagamento() {
   } else if (pag === "Multipagamento") {
     if (boxMulti) {
       boxMulti.style.display = "block";
-      // Esconde o select enquanto está no modo multi
       selectPag.style.display = "none";
-      // Inicializa com 2 formas se ainda não há nenhuma
       const partes = document.getElementById("multi-partes");
       if (partes && partes.children.length === 0) {
-        adicionarPartePagamento(); // 1ª forma
-        adicionarPartePagamento(); // 2ª forma
+        adicionarPartePagamento();
+        adicionarPartePagamento();
       }
       atualizarRestanteMulti();
     }
-    return; // Não chama atualizarRestanteMulti de novo
+    return; 
   }
 
-  // Garante que o select volte a aparecer se não for Multipagamento
   if (selectPag) selectPag.style.display = "";
 }
 
@@ -5258,9 +5298,17 @@ function _pushSuportado() {
  * Retorna "" se não configurada.
  */
 async function _pushCarregarVapidKey() {
-  // Chave pública configurada diretamente aqui (seguro, pois é uma chave pública).
-  // Substitua pelo valor que você gerou no terminal.
-  return "BK1XvptGwmUZa8bH_fxBxzhYJCD82H2UHk0vGBa6pAlIcfvmGg55iMU44BCimON33mra_SxsQBVLrEi1oO2u-Iw";
+  if (_vapidKeyCache !== null) return _vapidKeyCache;
+  try {
+    const { data } = await supa
+      .from("configuracoes")
+      .select("vapid_public_key")
+      .maybeSingle();
+    _vapidKeyCache = (data?.vapid_public_key || "").trim();
+  } catch (_) {
+    _vapidKeyCache = "";
+  }
+  return _vapidKeyCache;
 }
 
 /**
@@ -5483,3 +5531,95 @@ async function _pushInicializar() {
     _pushInicializar();
   }
 })();
+
+// ══════════════════════════════════════════════════════════════
+//  GERADOR DE PIX COPIA E COLA (Padrão EMV - Banco Central)
+// ══════════════════════════════════════════════════════════════
+
+// Limpa a chave (remove pontos de CPF, parênteses de telefone, etc.)
+function _pixLimparChave(chave) {
+  if (!chave) return "";
+  let c = chave.trim();
+  // Se for e-mail, não limpa (só tira espaços)
+  if (c.includes("@")) return c;
+  // Se for telefone ou CPF/CNPJ, remove tudo que não for número ou +
+  if (c.startsWith("+")) {
+    return "+" + c.replace(/\D/g, "");
+  }
+  return c.replace(/\D/g, ""); // CPF/CNPJ ou chave aleatória numérica
+}
+
+// Calcula o CRC16 (Checksum obrigatório do Pix)
+function _pixCalcularCRC16(payload) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < payload.length; i++) {
+    crc ^= payload.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = (crc << 1) ^ 0x1021;
+      } else {
+        crc = crc << 1;
+      }
+    }
+  }
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, "0");
+}
+
+// Gera o código Pix completo
+function _pixGerarPayload(chave, nome, cidade, valor, txid = "***") {
+  const chaveLimpa = _pixLimparChave(chave);
+  
+  // Remove acentos e caracteres especiais do nome e cidade
+  const sanitize = (str) => 
+    (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9 ]/g, "").toUpperCase();
+    
+  const nomeFormatado = sanitize(nome).substring(0, 25) || "LOJA";
+  const cidadeFormatada = sanitize(cidade).substring(0, 15) || "BRASIL";
+  const valorFormatado = parseFloat(valor).toFixed(2);
+
+  // Função auxiliar: Monta campo (ID + Tamanho + Valor)
+  const _field = (id, val) => {
+    const len = val.length.toString().padStart(2, "0");
+    return `${id}${len}${val}`;
+  };
+
+  const gui = "BR.GOV.BCB.PIX";
+  const merchantAccount = _field("00", gui) + _field("01", chaveLimpa);
+
+  let payload = 
+    _field("00", "01") +               // Payload Format Indicator
+    _field("26", merchantAccount) +    // Merchant Account Information (Pix)
+    _field("52", "0000") +             // Merchant Category Code
+    _field("53", "986") +              // Transaction Currency (986 = BRL)
+    _field("54", valorFormatado) +     // Transaction Amount
+    _field("58", "BR") +               // Country Code
+    _field("59", nomeFormatado) +      // Merchant Name
+    _field("60", cidadeFormatada) +    // Merchant City
+    _field("62", _field("05", txid)) + // Additional Data Field (TxID)
+    "6304";                            // CRC16 ID e tamanho (fixo)
+
+  const crc = _pixCalcularCRC16(payload);
+  return payload + crc;
+}
+
+// Função para copiar ao clicar no botão
+function copiarPixCopiaECola() {
+  const textarea = document.getElementById("pix-copia-cola");
+  if (!textarea) return;
+
+  navigator.clipboard.writeText(textarea.value).then(() => {
+    const btn = document.getElementById("btn-copiar-pix");
+    const txtOriginal = btn.innerHTML;
+    
+    btn.innerHTML = "✅ Código Copiado!";
+    btn.style.background = "#4caf50";
+    
+    setTimeout(() => {
+      btn.innerHTML = txtOriginal;
+      btn.style.background = "#2e7d32";
+    }, 3000);
+  }).catch(err => {
+    alert("Erro ao copiar o código. Por favor, tente novamente.");
+  });
+}

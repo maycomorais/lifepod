@@ -2644,16 +2644,41 @@ async function calcularFinanceiro() {
   const facturaFiltro = elFactura ? elFactura.value : "todos";
 
   // ── 4. Busca pedidos dentro da janela da sessão ───────────────────
-  let query = supa
-    .from("pedidos")
-    .select("*, motoboys(nome)")
-    .neq("status", "cancelado")
-    .or(
-      `and(created_at.gte.${utcI},created_at.lte.${utcF}),and(quitado_em.gte.${utcI},quitado_em.lte.${utcF})`,
-    );
+    // ── 4. Busca pedidos dentro da janela da sessão (COM PAGINAÇÃO) ───────────────────
+  let peds = [];
+  let page = 0;
+  const pageSize = 1000;
+  let temMais = true;
 
-  const { data: pedidos } = await query;
-  let peds = pedidos || [];
+  while (temMais) {
+    const query = supa
+      .from("pedidos")
+      .select("*, motoboys(nome)")
+      .neq("status", "cancelado")
+      .or(
+        `and(created_at.gte.${utcI},created_at.lte.${utcF}),and(quitado_em.gte.${utcI},quitado_em.lte.${utcF})`,
+      )
+      .order("created_at", { ascending: true })
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Erro ao buscar pedidos:", error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      peds = peds.concat(data);
+      page++;
+      // Se retornou menos de 1000, significa que chegamos no fim da lista
+      if (data.length < pageSize) {
+        temMais = false;
+      }
+    } else {
+      temMais = false;
+    }
+  };
 
   // 🚨 O FILTRO MÁGICO DO NA NOTA 🚨
   peds = peds.filter((p) => {
@@ -3687,10 +3712,8 @@ async function carregarRelatorio() {
         '<span style="background:#f7f0e8;color:#6e4a1a;border-radius:10px;padding:2px 7px;font-size:0.68rem;font-weight:700">🚶 Retirada</span>',
     };
     const tipoBadge = tipoBadges[p.tipo_entrega] || "";
-    const _podeCancelRel = _podeCancelarDireto();
-    const jaCancelado = p.status === "cancelado";
 
-    // Timeline — PDV tem etapas diferentes
+    // Timeline
     const tl = isPDV
       ? [
           {
@@ -3799,21 +3822,17 @@ async function carregarRelatorio() {
         ${totalTime !== "-" ? `<div style="margin-top:5px;padding:3px 7px;background:#f0f4ff;border-radius:6px;font-size:0.75rem;font-weight:700;color:#3a4db7;text-align:center">⏱ ${totalTime}</div>` : ""}
       </td>
       <td style="padding:10px 8px;white-space:nowrap;text-align:center;min-width:90px">
-        ${
-          !jaCancelado && _podeCancelRel
-            ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedidoRelatorio(${p.id})" title="Cancelar este pedido" style="font-size:0.7rem;padding:4px 8px">
-          <i class="fas fa-times"></i> Cancelar
-        </button>`
-            : jaCancelado
-              ? '<span style="color:#aaa;font-size:0.7rem">Cancelado</span>'
-              : ""
-        }
+        <!-- BOTÃO DE EDITAR PAGAMENTO -->
+        <button class="btn btn-sm" onclick="abrirModalEditarPagamento(${p.id})" title="Editar Forma de Pagamento" 
+          style="background:#27ae60; color:#fff; font-size:0.85rem; padding:6px 12px; border-radius:6px; border:none; cursor:pointer; margin-bottom:4px;">
+          <i class="fas fa-edit"></i>
+        </button>
       </td>
     </tr>`;
   });
   if (!pedidos || pedidos.length === 0)
     tbody.innerHTML =
-      '<tr><td colspan="6" style="text-align:center;padding:40px;color:#aaa">Nenhum pedido encontrado.</td></tr>';
+      '<tr><td colspan="7" style="text-align:center;padding:40px;color:#aaa">Nenhum pedido encontrado.</td></tr>';
   const el = document.getElementById("rel-total-count");
   if (el) el.textContent = (pedidos || []).length + " pedidos encontrados";
 }
@@ -6698,10 +6717,15 @@ async function salvarProduto() {
         ) || 0;
     }
 
-    if (document.getElementById("prod-venda-kg")?.checked) {
-      const pkgVal =
-        parseFloat(document.getElementById("prod-preco-kg")?.value) || 0;
-      if (pkgVal > 0) precoBase = pkgVal;
+    // ── Detecta Venda por Kg ──────────────────────────────────
+    // (precisa vir ANTES de montar montagem_config e do payload)
+    const _vendaKgAtiva =
+      document.getElementById("prod-venda-kg")?.checked === true;
+    const _precoKgVal =
+      parseFloat(document.getElementById("prod-preco-kg")?.value) || 0;
+
+    if (_vendaKgAtiva && _precoKgVal > 0) {
+      precoBase = _precoKgVal;
     }
 
     // ── Promoção ──────────────────────────────────────────────
@@ -6732,14 +6756,25 @@ async function salvarProduto() {
     // ── Faixas de preço (varejo/atacado) ──────────────────────
     const _faixasPreco = _coletarFaixasPreco();
 
-    // Preserva montagem_config existente quando não há faixas ativas.
-    // Sem isso, editar uma pizza/montável/combo sem mexer em faixas
-    // apaga a configuração original do produto.
+    // ── Monta montagem_config com a prioridade correta ────────
+    // 1) Faixas de preço (varejo/atacado) → __tipo: "varejo"
+    // 2) Venda por Kg                     → __tipo: "kg"
+    // 3) Nenhum dos dois → preserva o montagem_config antigo,
+    //    MAS remove __tipo "kg"/"varejo" caso o usuário tenha
+    //    desmarcado essas opções ao editar.
     let _montagemConfig = null;
     if (_faixasPreco) {
       _montagemConfig = { __tipo: "varejo", faixas_preco: _faixasPreco };
+    } else if (_vendaKgAtiva && _precoKgVal > 0) {
+      _montagemConfig = { __tipo: "kg", preco_kg: _precoKgVal };
     } else if (id && _produtosMap[id]?.montagem_config) {
-      _montagemConfig = _produtosMap[id].montagem_config;
+      const _cfgAntigo = _produtosMap[id].montagem_config;
+      const _tipoAntigo =
+        _cfgAntigo && !Array.isArray(_cfgAntigo) ? _cfgAntigo.__tipo : null;
+      // Só preserva se o config antigo NÃO era kg nem varejo
+      if (_tipoAntigo !== "kg" && _tipoAntigo !== "varejo") {
+        _montagemConfig = _cfgAntigo;
+      }
     }
 
     // ── Payload ───────────────────────────────────────────────
@@ -7031,15 +7066,41 @@ async function abrirModalProduto(produto = null, tipoInicial = null) {
     if (_emEl && temEst && produto.estoque_minimo != null)
       _emEl.value = produto.estoque_minimo;
 
-    // Venda por Kg
-    const eKg = produto.unidade_venda === "kg" && produto.preco_kg > 0;
+    // ── Venda por Kg ──────────────────────────────────────────
+    // Fonte de verdade: montagem_config.__tipo === "kg".
+    // Fallback: unidade_venda === "kg" e preco_kg > 0 (compat. com
+    // produtos antigos que só tinham unidade_venda).
+    let _cfgProdKg = produto.montagem_config;
+    if (typeof _cfgProdKg === "string") {
+      try {
+        _cfgProdKg = JSON.parse(_cfgProdKg);
+      } catch (_) {
+        _cfgProdKg = null;
+      }
+    }
+    const _ehKgPorMontagem =
+      _cfgProdKg &&
+      !Array.isArray(_cfgProdKg) &&
+      _cfgProdKg.__tipo === "kg";
+    const _ehKgPorUnidade =
+      produto.unidade_venda === "kg" && produto.preco_kg > 0;
+    const _ehKg = !!(_ehKgPorMontagem || _ehKgPorUnidade);
+
+    // Preço por kg: prioriza o valor salvo dentro do montagem_config,
+    // senão usa o campo legado produto.preco_kg.
+    const _precoKgEdit =
+      _ehKgPorMontagem && _cfgProdKg?.preco_kg
+        ? Number(_cfgProdKg.preco_kg)
+        : produto.preco_kg || 0;
+
     const _vkEl = document.getElementById("prod-venda-kg");
     if (_vkEl) {
-      _vkEl.checked = eKg;
-      toggleVendaKg(eKg);
+      _vkEl.checked = _ehKg;
+      toggleVendaKg(_ehKg);
     }
     const _pkEl = document.getElementById("prod-preco-kg");
-    if (_pkEl && produto.preco_kg) _pkEl.value = produto.preco_kg;
+    if (_pkEl && _precoKgEdit > 0) _pkEl.value = _precoKgEdit;
+
     // ── Perecível ──────────────────────────────────────────
     const _perEl = document.getElementById("prod-perecivel");
     if (_perEl) {
@@ -20952,5 +21013,93 @@ async function _pdvSalvarNovoClienteNaNota(nome, telefone) {
     }
   } catch (e) {
     alert("Erro ao cadastrar cliente: " + e.message);
+  }
+}
+async function abrirModalEditarPagamento(pedidoId) {
+  try {
+    const { data: pedido, error } = await supa
+      .from("pedidos")
+      .select("id, cliente_nome, tipo_entrega, itens, total_geral, forma_pagamento")
+      .eq("id", pedidoId)
+      .single();
+
+    if (error || !pedido) {
+      alert("Erro ao carregar os dados do pedido.");
+      return;
+    }
+
+    document.getElementById("edit-pag-pedido-id").value = pedido.id;
+    document.getElementById("edit-pag-id-txt").textContent = `#${pedido.id}`;
+    
+    // Formata o total apenas para exibição (bloqueado)
+    document.getElementById("edit-pag-total").value = (pedido.total_geral || 0).toLocaleString("es-PY");
+
+    // Monta o resumo dos itens (igual ao print)
+    const itensTxt = (pedido.itens || [])
+      .map((i) => `${i.qtd || i.q || 1}x ${i.nome || i.n}`)
+      .join(", ");
+    document.getElementById("edit-pag-resumo").innerHTML = `
+      <div style="font-weight:700; color:#1a1a1a;">${pedido.cliente_nome || "Cliente"} - ${pedido.tipo_entrega}</div>
+      <div style="color:#666; margin-top:6px;">${itensTxt}</div>
+    `;
+
+    // Ajusta o select para exibir a opção exata (remove sufixos de cartão BR)
+    let metodoAtual = pedido.forma_pagamento || "Efetivo";
+    if (metodoAtual.includes("Cartao BR") || metodoAtual.includes("Cartão BR")) metodoAtual = "CartaoBR";
+    else if (metodoAtual.includes("Cartao") || metodoAtual.includes("Cartão")) metodoAtual = "Cartao";
+
+    document.getElementById("edit-pag-metodo").value = metodoAtual;
+
+    // Abre o modal
+    document.getElementById("modal-editar-pagamento").style.display = "flex";
+  } catch (e) {
+    alert("Erro inesperado: " + e.message);
+  }
+}
+
+async function salvarFormaPagamentoPedido() {
+  const pedidoId = document.getElementById("edit-pag-pedido-id").value;
+  const novoMetodo = document.getElementById("edit-pag-metodo").value;
+  const btn = event.target;
+
+  if (!pedidoId) return;
+
+  btn.disabled = true;
+  btn.innerHTML = "Salvando...";
+
+  try {
+    // Se o método antigo era Multipagamento, precisamos limpar o obs_pagamento 
+    // para não quebrar o cálculo do financeiro.
+    const { data: ped } = await supa
+      .from("pedidos")
+      .select("forma_pagamento")
+      .eq("id", pedidoId)
+      .single();
+
+    const eraMulti = (ped?.forma_pagamento || "").toLowerCase() === "multipagamento";
+    
+    const updateData = { forma_pagamento: novoMetodo };
+    if (eraMulti && novoMetodo !== "Multipagamento") {
+      updateData.obs_pagamento = ""; // limpa o JSON antigo
+    }
+
+    const { error } = await supa
+      .from("pedidos")
+      .update(updateData)
+      .eq("id", pedidoId);
+
+    if (error) throw error;
+
+    alert("✅ Forma de pagamento atualizada com sucesso!");
+    fecharModal("modal-editar-pagamento");
+    
+    // Atualiza a tabela e o financeiro
+    carregarRelatorio(); 
+    if (typeof calcularFinanceiro === "function") calcularFinanceiro();
+
+  } catch (e) {
+    alert("❌ Erro ao salvar: " + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save"></i> Salvar Alterações';
   }
 }

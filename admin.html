@@ -3962,6 +3962,50 @@
 
   </div>
 </div>
+<!-- MODAL EDITAR FORMA DE PAGAMENTO -->
+<div id="modal-editar-pagamento" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto; z-index: 99999;">
+  <div class="modal-content" style="max-width:400px; width:100%; margin:auto; background:#fff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.3); padding: 24px;">
+    
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:2px solid #eee; padding-bottom:12px;">
+      <h3 style="margin:0; font-size:1.2rem; color:#1a1a1a;">
+        <i class="fas fa-edit" style="color:#27ae60"></i> Editar Pedido <span id="edit-pag-id-txt"></span>
+      </h3>
+      <button onclick="fecharModal('modal-editar-pagamento')" style="background:none;border:none;font-size:1.8rem;cursor:pointer;color:#888;line-height:1;">×</button>
+    </div>
 
+    <input type="hidden" id="edit-pag-pedido-id">
+    
+    <!-- Resumo do Pedido -->
+    <div id="edit-pag-resumo" style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:0.85rem; color:#333;"></div>
+
+    <!-- Forma de Pagamento -->
+    <div class="form-group">
+      <label style="font-weight:600; font-size:0.9rem; color:#555; display:block; margin-bottom:6px;">Forma de Pagamento</label>
+      <select id="edit-pag-metodo" class="form-control" style="border:2px solid #27ae60; font-weight:700; font-size:1rem; padding: 10px; border-radius: 8px; width: 100%;">
+        <option value="Efetivo">💵 Efectivo (Dinheiro)</option>
+        <option value="Cartao">💳 Tarjeta (PY)</option>
+        <option value="CartaoBR">💳🇧🇷 Tarjeta BR</option>
+        <option value="Pix">🟢 Pix</option>
+        <option value="Transferencia">🏦 Alias / Transferencia</option>
+        <option value="QrPy">📱 QR Paraguay</option>
+        <option value="Multipagamento">🔀 Multipagamento</option>
+        <option value="NaNota">📋 Na Nota</option>
+      </select>
+    </div>
+
+    <!-- Total Geral (Bloqueado) -->
+    <div class="form-group" style="margin-top: 16px;">
+      <label style="font-weight:600; font-size:0.9rem; color:#555; display:block; margin-bottom:6px;">Total Geral (Gs) - Não editável</label>
+      <input type="text" id="edit-pag-total" class="form-control" readonly style="background:#f0f0f0; cursor:not-allowed; font-weight:700; color:#555; padding: 10px; border-radius: 8px; width: 100%; border: 1px solid #ccc;">
+    </div>
+
+    <!-- Botões -->
+    <div style="display:flex; gap:10px; margin-top:24px;">
+      <button class="btn btn-danger" onclick="fecharModal('modal-editar-pagamento')" style="flex:1; padding:12px; font-weight:700; border-radius: 8px; border: none; background: #e74c3c; color: white; cursor: pointer;">Cancelar</button>
+      <button class="btn btn-success" onclick="salvarFormaPagamentoPedido()" style="flex:1; padding:12px; font-weight:700; border-radius: 8px; border: none; background: #27ae60; color: white; cursor: pointer;"><i class="fas fa-save"></i> Salvar Alterações</button>
+    </div>
+
+  </div>
+</div>
 </body>
 </html>
